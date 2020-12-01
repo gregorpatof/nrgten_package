@@ -1,0 +1,4 @@
+include src/nrgten/vcontacts/Vcontacts-v1.2_for_python.c
+include src/nrgten/vcontacts/Vpoly.h
+include src/nrgten/config/*.atomtypes
+include src/nrgten/config/*.masses

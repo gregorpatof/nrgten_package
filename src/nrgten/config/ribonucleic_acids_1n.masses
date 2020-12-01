@@ -1,0 +1,6 @@
+CONNECT_INIT: O3' -> P
+REDEFINE_RESIS: (n-1) -> (n) | O3'
+CONNECT: C3' -> O3'
+N_MASSES: 1
+CENTER: C1'
+NAME: S

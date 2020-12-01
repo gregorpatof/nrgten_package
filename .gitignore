@@ -1,0 +1,12 @@
+.idea
+src/nrgten/vcontacts/*.so
+src/nrgten/vcontacts/*.o
+src/nrgten/.DS_Store
+nrgten.egg-info
+dist
+build
+src/nrgten/*.so
+src/nrgten/__pycache__
+*.pdb
+src/nrgten/*.pdb
+*.tar.gz

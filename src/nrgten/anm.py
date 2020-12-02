@@ -1,4 +1,4 @@
-from nrgens.enm import ENM
+from nrgten.enm import ENM
 import numpy as np
 import os
 import pickle

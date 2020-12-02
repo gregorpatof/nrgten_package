@@ -7,6 +7,7 @@ dist
 build
 src/nrgten/*.so
 src/nrgten/__pycache__
-*.pdb
+*/__pycache__
 src/nrgten/*.pdb
+src/nrgten/*.df
 *.tar.gz

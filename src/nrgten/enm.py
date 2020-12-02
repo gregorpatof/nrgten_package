@@ -1,5 +1,5 @@
-from nrgens.macromol import get_macromol_list
-from nrgens.massdef import MassDef, massdefs_dicts_are_same
+from nrgten.macromol import get_macromol_list
+from nrgten.massdef import MassDef, massdefs_dicts_are_same
 import numpy as np
 import os
 import abc

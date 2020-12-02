@@ -1,5 +1,5 @@
-import nrgens.parser as parser
-import nrgens.vcontacts_wrapper as vcontacts_wrapper
+import nrgten.parser as parser
+import nrgten.vcontacts_wrapper as vcontacts_wrapper
 import os
 import numpy as np
 

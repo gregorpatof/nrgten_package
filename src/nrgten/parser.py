@@ -1,5 +1,5 @@
-from nrgens.atom import Atom
-from nrgens.residue_list import ResidueList
+from nrgten.atom import Atom
+from nrgten.residue_list import ResidueList
 
 
 def parse_pdb(pdb_file, atypes_dict):

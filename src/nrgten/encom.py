@@ -1,9 +1,9 @@
-import nrgens.eq_filler as eq_filler
+import nrgten.eq_filler as eq_filler
 import numpy as np
 import sys
 import os
 import pickle
-from nrgens.enm import ENM
+from nrgten.enm import ENM
 
 
 class ENCoM(ENM):
@@ -523,9 +523,9 @@ def distance(a, b):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise ValueError("I need 1 arg : pdb (protein) file")
-    pdb_file = sys.argv[1]
+    # if len(sys.argv) != 2:
+    #     raise ValueError("I need 1 arg : pdb (protein) file")
+    # pdb_file = sys.argv[1]
 
     # test2 = ENCoM("closed_clean.pdb")
     test = ENCoM("test_medium.pdb")
@@ -534,6 +534,11 @@ if __name__ == "__main__":
     entro = test.compute_vib_entropy_nussinov()
     test.write_dynamical_signature("test.df")
     print(entro)
+    x = test.eigvals[6:16]
+    print(test.eigvals[6:16])
+
+
+
 
 
 

@@ -11,10 +11,10 @@ def get_surface_dict(pdb_str, n_atoms):
         unique atom numbers), containing surface area in contact between
         pairs of atoms.
     """
-    # p = Pool(1)
-    # results = p.starmap(get_surface_dict_private, zip([pdb_str],[n_atoms]))
-    # return results[0]
-    return get_surface_dict_private(pdb_str, n_atoms)
+    p = Pool(1)
+    results = p.starmap(get_surface_dict_private, zip([pdb_str],[n_atoms]))
+    return results[0]
+    # return get_surface_dict_private(pdb_str, n_atoms)
 
 
 def get_surface_dict_private(pdb_str, n_atoms):
@@ -50,7 +50,6 @@ def run_vcon(pdb_str, n_atoms, tried_compiling_once=False):
     """
     data = ctypes.create_string_buffer(bytes(pdb_str, 'utf-8'), len(pdb_str))
     libpath = Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vcontacts'))
-    print(libpath)
     libnames = []
     libnames = libnames + [x for x in libpath.glob("vconlib*.so")]
     libnames = libnames + [x for x in libpath.glob("vconlib*.dll")]

@@ -1,5 +1,5 @@
-from nrgens.encom import ENCoM
-from nrgens.anm import ANM
+from nrgten.encom import ENCoM
+from nrgten.anm import ANM
 import numpy as np
 import sys
 import glob
@@ -568,161 +568,16 @@ def test_pa_pi_2(use_pickle=True):
     print(get_pa_pi(open, closed))
     print(get_pa_pi(closed, open))
 
-def half_life_compCan():
-    d = 2419200000
-    24386341640
-    n = 0
-    for i in range(500):
-        print(n)
-        n *= 2**(-1/7)
-        # n *= .5
-        print(n)
-        print(0.010530*n)
-        n += d
-        # n += 7*d
 
-
-def get_boltzmann_probs(energies, scale_factor):
-    probs = np.zeros((len(energies)))
-    for i, e in enumerate(energies):
-        probs[i] = np.exp(-e/scale_factor)
-    probs /= np.sum(probs)
-    return probs
-
-
-
-
-def test_boltzmann_squares():
-    lambdas = [1, 4, 9, 16]
-    lambdas_sqr = [1, 2, 3, 4]
-    ref = get_boltzmann_probs(lambdas, 1)
-    print(ref)
-    for x in range(3280, 3291):
-        y = x/10000
-        t = get_boltzmann_probs(lambdas_sqr, y)
-        print(pearsonr(ref, t))
-
-        print(y, t)
 
 
 
 if __name__ == "__main__":
-    test_boltzmann_squares()
-    # enc = ENCoM("test_medium.pdb")
-    # build_conf_ensemble(enc, [7, 8], "test_conf.pdb", step=0.1, max_displacement=0.3)
-    # if len(sys.argv) != 2:
-    #     raise ValueError("I need 1 arg : pdb (protein) file")
-    # pdb_file = sys.argv[1]
-    # enc = ENCoM(pdb_file, unique_id=pdb_file)
-    # ref = ENCoM("unit-tests/test_medium.pdb", unique_id="unit-tests/test_medium.pdb")
-    # targ = ENCoM("unit-tests/test_medium_deformed.pdb", unique_id="unit-tests/test_medium_deformed.pdb")
-    # print(fit_svd(ref, targ, 10))
-    # print(fit_svd_alignment(ref, targ, 6, [[x for x in range(0, 4)], [x for x in range(0, 4)]]))
-    # print(overlap_alignment(ref, targ, 6, [[x for x in range(0, 4)], [x for x in range(0, 4)]]))
-    # test_overlap_alignment()
-    # half_life_compCan()
+    # test_boltzmann_squares()
 
-    # test_pa_pi()
-    # test_pa_pi_2()
+    open = ENCoM("../../tests/open_clean.pdb")
+    closed = ENCoM("../../tests/closed_clean.pdb")
+    print(overlap(open, closed, 10))
+    print(overlap(closed, open, 10))
+    # print(open.compute_bfactors()[:15])
 
-
-
-
-
-    # mir125_dir = "unit-tests/mir125a/1d0022"
-    # pdbs = glob.glob(mir125_dir + "/*.pdb")
-    # for i in range(len(pdbs)):
-    #     run_mir125a(pdbs[i])
-
-    # p = Pool(8)
-    # p.map(run_mir125a, pdbs)
-
-    # enc = ENCoM(pdb_file)
-    # enc.write_normalized_dynamical_signature("test_dyn.txt")
-
-
-    # xray_rna = get_codes_new_db(False, False, True, True)
-    # parse_new_db(xray_rna)
-    # parse_new_db(["1H1K"])
-
-    # parse_filtered_bfacts()
-    # test_parsing("unit-tests/filtered_bfact_pdbs/1phb.pdb")
-
-
-
-
-    # test = ENCoM(pdb_file)
-    # deformed = ENCoM("unit-tests/test_medium_deformed.pdb", solve=False)
-    # vec = np.copy(test.eigvecs[6])
-    # for i in range(8):
-    #     vec *= 10
-    #     print(rmsd_of_3n_vector(vec))
-    # n = test.get_n_masses()
-    # vec = []
-    # for i in range(n):
-    #     vec.append([1, 2, 3])
-    # test.translate(vec)
-    # test.write_to_file("filewrite_test.pdb")
-
-    # test_citrate_synthase()
-    # test_nmr(ENCoM, kwlist={'interact_const': 24, 'kr': 2048, 'ktheta': 2048, 'kphi': 2048})
-
-
-
-    # # # entropy testing, some weird things are going on!!! ###########################################################
-    # b = 10 ** 10
-    # p = 10 ** -10
-    # old_nuss_bfact = test_entropy_bfacts(factor=10**12)
-    # for i in range(11, 15):
-    # old_nuss_thermo = test_entropy(factor=10**12)
-    # # print(old_nuss_bfact)
-    # # print(pearsonr(old_nuss_bfact[0], old_nuss_bfact[1]))
-    # old_nuss_bfact[0] = old_nuss_bfact[0] / old_nuss_bfact[2]
-    # old_nuss_bfact[1] = old_nuss_bfact[1] / old_nuss_bfact[2]
-    # # print(old_nuss_bfact)
-    # print(pearsonr(old_nuss_bfact[0], old_nuss_bfact[1]))
-    #
-    # old_nuss_thermo[0] = old_nuss_thermo[0] / old_nuss_thermo[2]
-    # old_nuss_thermo[1] = old_nuss_thermo[1] / old_nuss_thermo[2]
-    # print(pearsonr(old_nuss_thermo[0], old_nuss_thermo[1]))
-    #
-    # np.savetxt("unit-tests/delta_s/bfacts_corr4_newB.txt", np.transpose(old_nuss_bfact), delimiter=',')
-    # np.savetxt("unit-tests/delta_s/thermo_corr_newB.txt", np.transpose(old_nuss_thermo), delimiter=',')
-
-    # # # # Extended PD from 2 to 40 (was 2-12 in Jernigan paper) ######################################################
-    # jerns = []
-    # blacklisted_jerns = {0, 1, 5, 6, 11, 12} # reason for blacklisting : residues named UNK...
-    # for i in range(1, 17):
-    #     jerns.append("unit-tests/jernigan_renamed_cleaned/JR{:02}.pdb".format(i))
-    # print(jerns)
-    # results = np.zeros((10, 21))
-    # count = 0
-    # for i, jern in enumerate(jerns):
-    #     if i in blacklisted_jerns:
-    #         print("blacklisted...")
-    #     else:
-    #         print(i+1)
-    #         results[count][0] = test_jernigan(jern, ENCoM)
-    #         print(results[count][0])
-    #         for pd in range(2, 42, 2):
-    #             results[count][int(pd/2)] = test_jernigan(jern, ANM, kwlist={'power_dependence': pd})
-    #             print(results[count][int(pd/2)])
-    #         count += 1
-    # with open('jernigan_results_ortho.txt', 'wb') as f:
-    #     np.savetxt(f, results, delimiter=',')
-
-
-    # for cut in range(7, 25):
-    #     print(test_nmr(ANM, kwlist={'cut': cut}))
-
-
-    # for k in range(10):
-    #     test_nmr(ENCoM, kwlist={'interact_const': 24, 'kr': 2048, 'ktheta':2048, 'kphi':2048, 'power_dependenceV4':k})
-
-    # test_nmr(ANM)
-    # test = np.array([0.29564045844139564, 0.43492658283271873, 0.24394968177600132, 0.13148010177596031, 0.42024919492831947, 0.4147094089006102, 0.10213191265840724, 0.20776748061268779, 0.15718421268408028, 0.025876526844458])
-    # print(np.sqrt(np.sum(test**2)))
-    # motion(test, 1, .25, 4, "motion.pdb")
-
-    # print(fit_svd(test, deformed, 10))
-    # print(fit_svd_svd(test, deformed, 10))

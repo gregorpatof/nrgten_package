@@ -72,11 +72,11 @@ class ANM(ENM):
         if not self.is_equal(pickled_anm):
             return False
         self.__dict__.update(pickled_anm.__dict__)
-        self.reconstitute()
+        self._reconstitute()
         return True
 
     def pickle(self):
-        super().clear_info()
+        super()._clear_info()
         pickle_file = self.get_pickle_file()
         with open(pickle_file, 'wb') as f:
             pickle.dump(self, f)

@@ -98,12 +98,12 @@ class ENCoM(ENM):
         if not self.is_equal(pickled_enc):
             return False
         self.__dict__.update(pickled_enc.__dict__)
-        self.reconstitute()
+        self._reconstitute()
         return True
 
     def pickle(self):
         self.V1_H, self.V2_H, self.V3_H, self.V4_H, self.bij = None, None, None, None, None
-        super().clear_info()
+        super()._clear_info()
         pickle_file = self.get_pickle_file()
         with open(pickle_file, 'wb') as f:
             pickle.dump(self, f)
@@ -531,11 +531,12 @@ if __name__ == "__main__":
     test = ENCoM("test_medium.pdb")
 
     bfacts = test.compute_bfactors()
-    entro = test.compute_vib_entropy_nussinov()
+    entro = test.compute_vib_entropy()
     test.write_dynamical_signature("test.df")
     print(entro)
     x = test.eigvals[6:16]
     print(test.eigvals[6:16])
+    test.build_conf_ensemble([7, 8], "test_conf.pdb")
 
 
 

@@ -6,10 +6,53 @@ import abc
 
 
 class ENM(metaclass=abc.ABCMeta):
-    """ Abstract base class (ABC) for Elastic Network Models (ENMs).
+    """Abstract base class (ABC) for Elastic Network Models (ENMs).
+
+    The ENM class implements methods that are common for all implemented ENMs (ENCoM, ANM and STeM as of this writing)
+    as well as the basic constructor. Subclasses are responsible for implementing the build_hessian() method (which
+    generates the Hessian matrix) as well as the pickle() and build_from_pickle() methods which allow the pickling
+    of solved ENMs for greatly accelerated subsequent computation of various metrics and/or properties.
+
+    Attributes:
+        dirpath (str): The absolute path to the directory containing the enm.py module.
+        verbose (bool): If True, verbose mode is on.
+        pickle_version (str): Ensures that ENMs pickled in the past are consistent with the current pickling scheme.
+        one_mass (bool): For nucleic acids, False means 3 masses per nucleotide and True means 1 mass/nucleotide
+        atypes_dict (dict): Dictionary of atom types built from the .atomtypes configuration files.
+        massdefs (MassDef): Mass definitions built from the .masses configuration files.
+        pdb_file (str): The PDB file on which the ENM is run.
+        mols (list): list of Macromol objects representing the macromolecules in the PDB file (one per MODEL).
+        mol (Macromol): The first Macromol (and the only in case of single-model PDBs), on which the ENM will be solved.
+        not_there (set): Set of atoms that are not defined in the .atomtypes and .masses config files (normally empty).
+        h (numpy.ndarray): The Hessian matrix.
+        eigvecs (numpy.ndarray): The eigenvectors, in row format (one eigenvector per row).
+        eigvals (list): list of eigenvalues, from lowest to highest
+        eigvecs_mat (numpy.ndarrary): The eigenvectors in column format (one eigenvector per column).
+        bfacts (list): The computed b-factors.
+        entropy (float): The computed vibrational entropy.
     """
     def __init__(self, pdb_file, added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None,
                  verbose=False, solve=False, use_pickle=False, ignore_hetatms=False, solve_mol=True, one_mass=False):
+        """Constructor for the ENM abstract base class.
+
+        Args:
+            pdb_file (str): The PDB file to read.
+            added_atypes (list, optional): list of .atypes configuration files to add.
+            added_massdef (list, optional): list of .masses configuration files to add.
+            atypes_list (list, optional): If supplied, the default .atypes configuration files are ignored and these
+                                          are the only ones read.
+            massdef_list (list, optional): If supplied, the default .masses configuration files are ignored and these
+                                           are the only ones read.
+            verbose (bool, optional): Triggers the verbose mode.
+            solve (bool, optional): If True, the Hessian matrix will be built and solved.
+            use_pickle (bool, optional): If True, the ENM object will be solved only once and subsequently built from
+                                         its pickled representation. Uses a lot of disk space for large systems.
+            ignore_hetatms (bool, optional): Flag to ignore HETATM records in the PDB file.
+            solve_mol (bool, optional): If True, the underlying Macromol object will be solved, i.e. the connectivity
+                                        of the residues will be inferred.
+            one_mass (bool, optional): If True, nucleic acids will be built using only one mass per nucleotide instead
+                                       of 3.
+        """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
         assert len(self.dirpath) > 0
         self.verbose = verbose
@@ -58,26 +101,42 @@ class ENM(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def build_hessian(self):
+        """Builds the Hessian matrix for the ENM. Implemented by subclasses.
+        """
         pass
 
     @abc.abstractmethod
     def build_from_pickle(self):
-        """ Must return boolean indicating success of building self from pickled version.
+        """Builds the solved ENM state from a pickled object. Implemented by subclasses.
+
+        Note:
+            Since ENMs in general have parameters, subclasses need to make sure to check that the input PDB and
+            all parameters are identical between the pickled representation and the present run. See example in
+            ENCoM class in encom module.
+
+        Returns:
+            True if successful, False otherwise.
         """
         pass
 
     @abc.abstractmethod
     def pickle(self):
-        """ Since many ENMs may end up being run on the same file, the name of the pickle must be unique (i.e.
-            .encom.pickle, .anm.pickle, etc.
+        """Uses the pickle module to produce a serialized object. Implemented by subclasses.
+
+        Note:
+            Since many ENMs may end up being run on the same file, the extension of the pickled file must be unique
+            (i.e. .encom.pickle, .anm.pickle, etc.)
         """
         pass
 
-    def clear_info(self):
+    def _clear_info(self):
+        """Clears the Hessian and row eigenvectors before pickling, to save space.
+        """
         self.h, self.eigvecs = None, None
-        # self.mol.clear_info()
 
-    def reconstitute(self):
+    def _reconstitute(self):
+        """Reconstitues the row eigenvectors from the column eigenvectors when building from pickle.
+        """
         self.eigvecs = np.transpose(self.eigvecs_mat)
 
     def get_filtered_eigvecs_mat(self, indices, filter):
@@ -249,8 +308,10 @@ class ENM(metaclass=abc.ABCMeta):
                 raise ValueError('No other method than "average" or "center" currently supported by get_exp_bfacts')
         return bfacts
 
-    def compute_vib_entropy(self):
-        """ Computes the vibrational entropy of the system.
+    def compute_vib_entropy_rigid_rotor(self):
+        """ Computes the vibrational entropy of the system using the rigid-rotor approximation.
+
+            This was the form used in the original ENCoM paper (doi: ﻿10.1371/journal.pcbi.1003569)
         """
         ent = 0
         for i in range(6, len(self.eigvals)):
@@ -258,7 +319,11 @@ class ENM(metaclass=abc.ABCMeta):
         self.entropy = ent
         return ent
 
-    def compute_vib_entropy_nussinov(self, beta=None, factor=1):
+    def compute_vib_entropy(self, beta=None, factor=1):
+        """ Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
+
+            beta is the scaling factor (higher beta means lower temperature)
+        """
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
         beta *= factor
@@ -271,9 +336,14 @@ class ENM(metaclass=abc.ABCMeta):
             entro += x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
         return entro
 
-    def compute_vib_enthalpy_nussinov(self, beta=None):
+    def compute_vib_enthalpy(self, beta=None, factor=1):
+        """ Vibrational enthalpy from the eigenfrequencies (without rigid-rotor approximation).
+
+            beta is the scaling factor (higher beta means lower temperature)
+        """
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
+        beta *= factor
         e = 2.718281828459045
         h = 6.62607004 * 10 ** -34
         pi = 3.1415926535897932384626433832795028841971693993751
@@ -282,6 +352,77 @@ class ENM(metaclass=abc.ABCMeta):
             vi = (self.eigvals[i] ** 0.5) / (2 * pi)
             enthal += (0.5 + 1 / (e ** (beta * vi) - 1)) * h * vi
         return enthal
+
+    def build_conf_ensemble(self, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000):
+        """ Has the same functionality (better name) as the old ENCoM executable build_grid_rmsd.
+            Creates a conformational ensemble by making every combination of the selected modes at every given rmsd step,
+            up to a total deformation of max_displacement for each mode (and in both directions). Writes the output as
+            a multi-model pdb file.
+            Important note: the mode indices in the modes_list are assumed to start at 1, with the first nontrivial mode
+            thus being at index 7.
+        """
+        # TODO : test that this still works
+        assert isinstance(modes_list, list)
+        grid_side = 1 + (2 * max_displacement / step)  # length of one side of the grid
+        if abs((grid_side - 0.999999999999) % 2) > 0.000001:  # make sure that small floating point errors are ignored
+            raise ValueError(
+                "build_conf_ensemble was executed with step={0} and max_displacement={1}. max_displacement " +
+                "has to be a multiple of step.".format(step, max_displacement))
+        grid_side = int(round(grid_side))
+        grid_side = int(grid_side)
+        n_conf = int(grid_side ** len(modes_list))  # total number of points, or conformations, in the grid
+        if n_conf > max_conformations:
+            raise ValueError("build_conf_ensemble was executed with parameters specifying {0} conformations with " +
+                             "max_conformations set at {1}. If you really want that many conformations, set " +
+                             "max_conformations higher.".format(n_conf, max_conformations))
+        eigvecs_list = []
+        for mode_index in modes_list:
+            if mode_index < 7:
+                raise ValueError(
+                    "build_conf_ensemble was run with mode index {0} in the modes_list, which is a trivial " +
+                    "(rotational/translational) motion.".format(mode_index))
+            eigvecs_list.append(np.copy(self.eigvecs[mode_index + 5]))
+            modermsd = self.rmsd_of_3n_vector(eigvecs_list[-1])
+            eigvecs_list[-1] /= modermsd
+        with open(filename, "w") as fh:
+            fh.write("REMARK Conformational ensemble written by nrgten.enm.ENM.build_conf_ensemble()\n" +
+                     "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
+                     "REMARK This ensemble contains {0} conformations\n".format(n_conf))
+            for i in range(n_conf):
+                self.write_one_point(eigvecs_list, i, grid_side, step, fh)
+            fh.write("END\n")
+
+    def write_one_point(self, eigvecs_list, conf_n, grid_side, step, fh):
+        """ Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1. This function computes
+            contributions from every mode automatically, translates the enm coordinates, and resets it back to original
+            after having written one model to the filehandle fh.
+        """
+        model_n = conf_n
+        nsteps_list = []
+        for i in range(len(eigvecs_list)):
+            nsteps = conf_n % grid_side
+            conf_n -= nsteps
+            conf_n /= grid_side
+            nsteps_list.append(nsteps - (grid_side - 1) / 2)
+        t_vect = np.zeros(len(eigvecs_list[0]))
+        for vec, nsteps in zip(eigvecs_list, nsteps_list):
+            t_vect += vec * nsteps * step
+        self.translate_3n_vector(t_vect)
+        self.write_model(int(model_n + 1), fh)
+        self.translate_3n_vector(-t_vect)
+
+    def rmsd_of_3n_vector(self, vec):
+        dists = np.zeros((int(len(vec) / 3)))
+        for i in range(0, len(vec), 3):
+            dists[int(i / 3)] = vec[i] ** 2 + vec[i + 1] ** 2 + vec[i + 2] ** 2
+        return np.sqrt(np.mean(dists))
+
+    def write_model(self, count, fh):
+        """ Writes one model to the given filehandle, with model number count.
+        """
+        fh.write("MODEL     {:>4}\n".format(count))
+        self.write_to_filehandle(fh)
+        fh.write("ENDMDL\n")
 
     def print_verbose(self, string):
         if self.verbose:
@@ -399,6 +540,7 @@ class ENM(metaclass=abc.ABCMeta):
         if len(basis) < target_n:
             raise ValueError("Unable to produce {0} orthonormalized vectors for pdb file {1}".format(target_n, self.pdb_file))
         return np.array(basis)
+
 
 
 

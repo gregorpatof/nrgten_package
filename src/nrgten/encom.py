@@ -163,8 +163,8 @@ class ENCoM(ENM):
         axes = ["X", "Y", "Z"]
         indexes = ["i", "j", "k"]
         for (b_i, bend) in enumerate(bends):
-            self.print_verbose(b_i)
-            self.print_verbose(bend)
+            self._print_verbose(b_i)
+            self._print_verbose(bend)
             (i, j, k) = bend
             p = np.array(masses[i][:3]) - np.array(masses[j][:3])
             norm_p = np.linalg.norm(p)
@@ -274,8 +274,8 @@ class ENCoM(ENM):
         axes = ["X", "Y", "Z"]
         indexes = ["i", "j", "k", "l"]
         for (t_i, torsion) in enumerate(torsions):
-            self.print_verbose(t_i)
-            self.print_verbose(torsion)
+            self._print_verbose(t_i)
+            self._print_verbose(torsion)
             (i, j, k, l) = torsion
             a = np.array(masses[j][:3]) - np.array(masses[i][:3])
             b = np.array(masses[k][:3]) - np.array(masses[j][:3])
@@ -317,7 +317,7 @@ class ENCoM(ENM):
         for i in range(n):
             for j in range(i + 1, n):
                 if self.is_long_range(i, j):
-                    self.print_verbose((i, j))
+                    self._print_verbose((i, j))
                     distij = self.mol.distmat[i][j]
                     bcoord = dict()  # corresponds to bx, by and bz in STeM.m
                     for ax in zip([0, 1, 2], axes):
@@ -381,7 +381,7 @@ class ENCoM(ENM):
         bij = np.zeros((n, n))
         atomnums_list = self.make_atomnums_list(masses, resis)
         atomnums_dict = self.make_atomnums_dict(resis)
-        self.print_verbose(self.atypes_dict)
+        self._print_verbose(self.atypes_dict)
         for i in range(n):
             ma = masses[i]  # mass_a
             ka = ma[4]  # key_a
@@ -398,7 +398,7 @@ class ENCoM(ENM):
                     raise e
                 bij[i][j] = surf_tot
                 bij[j][i] = surf_tot
-        self.print_verbose(self.not_there)
+        self._print_verbose(self.not_there)
         return bij
 
     def make_atomnums_list(self, masses, resis):

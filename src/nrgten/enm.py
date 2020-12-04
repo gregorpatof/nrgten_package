@@ -67,7 +67,7 @@ class ENM(metaclass=abc.ABCMeta):
                            atomfiles]
         if added_atypes is not None:
             atypes_list.append(added_atypes)
-        self.atypes_dict = self.build_atypes_dict(atypes_list)
+        self.atypes_dict = self._build_atypes_dict(atypes_list)
         if massdef_list is None:
             if self.one_mass:
                 massfiles = ["ribonucleic_acids_1n.masses", "amino_acids.masses"]
@@ -77,8 +77,8 @@ class ENM(metaclass=abc.ABCMeta):
                             massfiles]
         if added_massdef is not None:
             massdef_list.append(added_massdef)
-        self.massdefs = self.parse_massdefs(atypes_list, massdef_list)
-        self.print_verbose(self.massdefs)
+        self.massdefs = self._parse_massdefs(atypes_list, massdef_list)
+        self._print_verbose(self.massdefs)
         self.pdb_file = pdb_file
         self.mols = get_macromol_list(self.pdb_file, self.atypes_dict, self.massdefs, ignore_hetatms=ignore_hetatms)
         self.mol = self.mols[0]
@@ -115,7 +115,7 @@ class ENM(metaclass=abc.ABCMeta):
             ENCoM class in encom module.
 
         Returns:
-            True if successful, False otherwise.
+            bool: True if successful, False otherwise.
         """
         pass
 
@@ -140,7 +140,21 @@ class ENM(metaclass=abc.ABCMeta):
         self.eigvecs = np.transpose(self.eigvecs_mat)
 
     def get_filtered_eigvecs_mat(self, indices, filter):
-        """ Returns only the eigenvectors corresponding to the selected masses.
+        """Allows to select subvectors that correspond to certain masses.
+
+        This is useful when there are multiple masses per residue and the user wants to reduce eigenvectors to have
+        1 xyz component per residue, for example. It also allows to select specific indices, which is useful in the
+        case of alignments between slightly different structures.
+
+        Note:
+            The filtered vectors are always orthonormalized.
+
+        Args:
+            indices (list): list of indices to select, from 0 to n-1 (n being the number of masses).
+            filter (set): set of str names of masses to select (corresponding to the names in .masses config files).
+
+        Returns:
+            numpy.ndarray: the filtered eigenvectors in column format.
         """
         if filter is None:
             filtered_vecs = self.eigvecs
@@ -153,16 +167,19 @@ class ENM(metaclass=abc.ABCMeta):
             indices3n.append(i3+1)
             indices3n.append(i3+2)
         filtered_vecs = np.take(filtered_vecs, indices3n, axis=1)
-        # for i in range(len(filtered_vecs)):
-        #     filtered_vecs[i] /= np.linalg.norm(filtered_vecs[i])
         return np.transpose(self.gram_schmidt(filtered_vecs, 3*len(indices)))
 
     def is_equal(self, other):
-        """
-        Args:
-            other: instance of ENM to test
-        Returns: boolean
+        """Compares two ENM objects for equality. Useful for unpickling.
 
+        Args:
+            other (ENM): instance of ENM to test.
+
+        Note:
+            This is the general method that subclasses can call in addition to any specifics about their implementation.
+
+        Returns:
+            bool: True if equal, False otherwise.
         """
         assert isinstance(other, ENM)
         if not (self.pickle_version == other.pickle_version and
@@ -179,6 +196,11 @@ class ENM(metaclass=abc.ABCMeta):
         return True
 
     def solve(self):
+        """Solves the Hessian matrix to get eigenvectors and eigenvalues.
+
+        Returns:
+            tuple: (eigenvalues, eigenvectors) eigenvectors are in row format
+        """
         if not self.mol.solved:
             self.mol.solve()
         if self.h is None:
@@ -190,11 +212,11 @@ class ENM(metaclass=abc.ABCMeta):
         self.eigvecs = vecs  # this is a list of vectors (one vector per row)
         return self.eigvals, self.eigvecs
 
-    def parse_massdefs(self, atypes_list, massdef_list):
+    def _parse_massdefs(self, atypes_list, massdef_list):
         massdefs = dict()
         for i, (atypes_file, massdef_file) in enumerate(zip(atypes_list, massdef_list)):
             assert atypes_file.split('/')[-1].split('.')[0] == massdef_file.split('/')[-1].split('.')[0]
-            resis = self.resis_from_atypes(atypes_file)
+            resis = self._resis_from_atypes(atypes_file)
             massdef = MassDef(massdef_file)
             for r in resis:
                 if r in massdefs:
@@ -203,7 +225,7 @@ class ENM(metaclass=abc.ABCMeta):
                 massdefs[r] = massdef
         return massdefs
 
-    def resis_from_atypes(self, atypes):
+    def _resis_from_atypes(self, atypes):
         resis = []
         with open(atypes) as f:
             lines = f.readlines()
@@ -213,10 +235,10 @@ class ENM(metaclass=abc.ABCMeta):
                 resis.append(resi)
         return resis
 
-    def build_atypes_dict(self, atypes_list):
+    def _build_atypes_dict(self, atypes_list):
         atd = dict()
         for filename in atypes_list:
-            d = self.get_atype_dict(filename)
+            d = self._get_atype_dict(filename)
             for key in d:
                 if key in atd:
                     raise ValueError(
@@ -224,7 +246,7 @@ class ENM(metaclass=abc.ABCMeta):
                 atd[key] = d[key]
         return atd
 
-    def get_atype_dict(self, filename):
+    def _get_atype_dict(self, filename):
         d = dict()
         with open(filename) as f:
             lines = f.readlines()
@@ -255,9 +277,21 @@ class ENM(metaclass=abc.ABCMeta):
         return d
 
     def compute_bfactors(self, filter=None):
-        """ Computes the root-mean-square flutuations of every mass, which is
-            can be seen as a prediction of the experimental temperature factors,
-            of B-factors.
+        """Computes the predicted b-factors.
+
+        The root-mean-square flutuations of every mass can be seen as a prediction of the experimental temperature
+        factors, or B-factors.
+
+        Note:
+            In order to have more convenient numbers, the b-factors are scaled up by a factor of 1000. This does not
+            affect the validity of the value as it is only an indicator of relative flexibility between the masses.
+
+        Args:
+            filter (set, optional): set of str names of masses to select (corresponding to the names in .masses config
+                                    files).
+
+        Returns:
+            list: the computed b-factors
         """
         assert self.eigvals is not None
         assert self.eigvecs is not None
@@ -284,8 +318,13 @@ class ENM(metaclass=abc.ABCMeta):
             return self.bfacts
 
     def get_exp_bfacts(self, method="average", filter=None):
-        """ Extracts the experimental b-factors for every mass in the system,
-            using the specified method (average, center, min, max).
+        """Extracts the experimental b-factors for every mass in the system.
+
+        Args:
+            method (str): can currently be only "average" or "center". Average is the mean taken from all the atoms in
+                          the residue. Center is the value from the center atom (on which the mass is positioned).
+            filter (set, optional): set of str names of masses to select (corresponding to the names in .masses config
+                                    files).
         """
         bfacts = []
         resis = self.mol.resis
@@ -309,9 +348,13 @@ class ENM(metaclass=abc.ABCMeta):
         return bfacts
 
     def compute_vib_entropy_rigid_rotor(self):
-        """ Computes the vibrational entropy of the system using the rigid-rotor approximation.
+        """Computes the vibrational entropy of the system using the rigid-rotor approximation.
 
+        Note:
             This was the form used in the original ENCoM paper (doi: ﻿10.1371/journal.pcbi.1003569)
+
+        Returns:
+            float: The vibrational entropy of the system.
         """
         ent = 0
         for i in range(6, len(self.eigvals)):
@@ -320,9 +363,20 @@ class ENM(metaclass=abc.ABCMeta):
         return ent
 
     def compute_vib_entropy(self, beta=None, factor=1):
-        """ Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
+        """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
 
-            beta is the scaling factor (higher beta means lower temperature)
+        Note:
+            This is a more exact form of the vibrational entropy and is the preferred way to compute it. The
+            compute_vib_entropy_rigid_rotor method is there only for reproducibility purposes as the old ENCoM model
+            used that form.
+
+        Args:
+            beta (float, optional): The scaling factor (higher beta means lower temperature). If None, the default value
+                                    is used.
+            factor (float, optional): Can be used to scale the default value when beta is set to None.
+
+        Returns:
+            float: The vibrational entropy of the system.
         """
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
@@ -337,9 +391,15 @@ class ENM(metaclass=abc.ABCMeta):
         return entro
 
     def compute_vib_enthalpy(self, beta=None, factor=1):
-        """ Vibrational enthalpy from the eigenfrequencies (without rigid-rotor approximation).
+        """Vibrational enthalpy from the eigenfrequencies (without rigid-rotor approximation).
 
-            beta is the scaling factor (higher beta means lower temperature)
+        Args:
+            beta (float, optional): The scaling factor (higher beta means lower temperature). If None, the default value
+                                    is used.
+            factor (float, optional): Can be used to scale the default value when beta is set to None.
+
+        Returns:
+            float: The vibrational entropy of the system.
         """
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
@@ -354,14 +414,25 @@ class ENM(metaclass=abc.ABCMeta):
         return enthal
 
     def build_conf_ensemble(self, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000):
-        """ Has the same functionality (better name) as the old ENCoM executable build_grid_rmsd.
-            Creates a conformational ensemble by making every combination of the selected modes at every given rmsd step,
-            up to a total deformation of max_displacement for each mode (and in both directions). Writes the output as
-            a multi-model pdb file.
-            Important note: the mode indices in the modes_list are assumed to start at 1, with the first nontrivial mode
+        """Creates a conformational ensemble as a multi-model PDB file.
+
+        The idea is to make every combination of the selected modes at every given rmsd step, up to a total deformation
+        for each mode (and in both directions).
+
+        Note:
+            The mode indices in the modes_list argument are assumed to start at 1, with the first nontrivial mode
             thus being at index 7.
+
+        Args:
+            modes_list (list): list of integer indices of modes to use for the conformational ensemble. The first
+                               non-trivial mode is at index 7.
+            filename (str): The filename where the conformational ensemble will be written.
+            step (optional, float): The RMSD step between each grid point in the conformational ensemble.
+            max_displacement (float, optional): The maximum RMSD displacement for each mode. Has to be a multiple of
+                                                step.
+            max_conformations (int, optional): The maximum number of conformations. Ensures that users do not
+                                               accidentally generate huge PDB files.
         """
-        # TODO : test that this still works
         assert isinstance(modes_list, list)
         grid_side = 1 + (2 * max_displacement / step)  # length of one side of the grid
         if abs((grid_side - 0.999999999999) % 2) > 0.000001:  # make sure that small floating point errors are ignored
@@ -382,20 +453,21 @@ class ENM(metaclass=abc.ABCMeta):
                     "build_conf_ensemble was run with mode index {0} in the modes_list, which is a trivial " +
                     "(rotational/translational) motion.".format(mode_index))
             eigvecs_list.append(np.copy(self.eigvecs[mode_index + 5]))
-            modermsd = self.rmsd_of_3n_vector(eigvecs_list[-1])
+            modermsd = self._rmsd_of_3n_vector(eigvecs_list[-1])
             eigvecs_list[-1] /= modermsd
         with open(filename, "w") as fh:
             fh.write("REMARK Conformational ensemble written by nrgten.enm.ENM.build_conf_ensemble()\n" +
                      "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
                      "REMARK This ensemble contains {0} conformations\n".format(n_conf))
             for i in range(n_conf):
-                self.write_one_point(eigvecs_list, i, grid_side, step, fh)
+                self._write_one_point(eigvecs_list, i, grid_side, step, fh)
             fh.write("END\n")
 
-    def write_one_point(self, eigvecs_list, conf_n, grid_side, step, fh):
-        """ Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1. This function computes
-            contributions from every mode automatically, translates the enm coordinates, and resets it back to original
-            after having written one model to the filehandle fh.
+    def _write_one_point(self, eigvecs_list, conf_n, grid_side, step, fh):
+        """Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1.
+
+        Computes contributions from every mode automatically, translates the enm coordinates, and resets it back to
+        original after having written one model to the filehandle fh.
         """
         model_n = conf_n
         nsteps_list = []
@@ -408,23 +480,23 @@ class ENM(metaclass=abc.ABCMeta):
         for vec, nsteps in zip(eigvecs_list, nsteps_list):
             t_vect += vec * nsteps * step
         self.translate_3n_vector(t_vect)
-        self.write_model(int(model_n + 1), fh)
+        self._write_model(int(model_n + 1), fh)
         self.translate_3n_vector(-t_vect)
 
-    def rmsd_of_3n_vector(self, vec):
+    def _rmsd_of_3n_vector(self, vec):
         dists = np.zeros((int(len(vec) / 3)))
         for i in range(0, len(vec), 3):
             dists[int(i / 3)] = vec[i] ** 2 + vec[i + 1] ** 2 + vec[i + 2] ** 2
         return np.sqrt(np.mean(dists))
 
-    def write_model(self, count, fh):
+    def _write_model(self, count, fh):
         """ Writes one model to the given filehandle, with model number count.
         """
         fh.write("MODEL     {:>4}\n".format(count))
         self.write_to_filehandle(fh)
         fh.write("ENDMDL\n")
 
-    def print_verbose(self, string):
+    def _print_verbose(self, string):
         if self.verbose:
             print(string)
 

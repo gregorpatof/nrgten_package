@@ -17,7 +17,7 @@ class MainTest(unittest.TestCase):
         self.cs_closed = ENCoM(str(os.path.join(self.dirpath, "closed_clean.pdb")))
 
     def test_entropy(self):
-        self.assertAlmostEqual(self.medium.compute_vib_entropy_nussinov(), 504.8449418766389)
+        self.assertAlmostEqual(self.medium.compute_vib_entropy(), 504.8449418766389)
 
     def test_eigenvalues(self):
         """ Ensuring ENCoM consistency
@@ -61,7 +61,7 @@ class MainTest(unittest.TestCase):
                     self.assertLess(diff / expected[i], tolerance_small)
 
     def test_bfactors(self):
-        tolerance = 0.001 # b-factors also vary a little, but less than overlaps
+        tolerance = 0.01 # b-factors also vary a little, but less than overlaps
 
         expected = [17.915181389368097, 9.807507859742454, 5.6361432619585985, 4.478888248023526, 3.8351524693259593,
                     3.503278027646238, 4.584754887889988, 4.75555282481797, 3.949012476056274, 3.690415817549934,

@@ -6,7 +6,7 @@ import abc
 
 
 class ENM(metaclass=abc.ABCMeta):
-    """Abstract base class (ABC) for Elastic Network Models (ENMs).
+    """Abstract base class (ABC) for Elastic Network Models (ENMs). testtest
 
     The ENM class implements methods that are common for all implemented ENMs (ENCoM, ANM and STeM as of this writing)
     as well as the basic constructor. Subclasses are responsible for implementing the build_hessian() method (which
@@ -129,72 +129,6 @@ class ENM(metaclass=abc.ABCMeta):
         """
         pass
 
-    def _clear_info(self):
-        """Clears the Hessian and row eigenvectors before pickling, to save space.
-        """
-        self.h, self.eigvecs = None, None
-
-    def _reconstitute(self):
-        """Reconstitues the row eigenvectors from the column eigenvectors when building from pickle.
-        """
-        self.eigvecs = np.transpose(self.eigvecs_mat)
-
-    def get_filtered_eigvecs_mat(self, indices, filter):
-        """Allows to select subvectors that correspond to certain masses.
-
-        This is useful when there are multiple masses per residue and the user wants to reduce eigenvectors to have
-        1 xyz component per residue, for example. It also allows to select specific indices, which is useful in the
-        case of alignments between slightly different structures.
-
-        Note:
-            The filtered vectors are always orthonormalized.
-
-        Args:
-            indices (list): list of indices to select, from 0 to n-1 (n being the number of masses).
-            filter (set): set of str names of masses to select (corresponding to the names in .masses config files).
-
-        Returns:
-            numpy.ndarray: the filtered eigenvectors in column format.
-        """
-        if filter is None:
-            filtered_vecs = self.eigvecs
-        else:
-            filtered_vecs = self.get_n_filtered_eigvecs(filter, 3*len(self.mol.masses), start=0)
-        indices3n = []
-        for i in indices:
-            i3 = 3*i
-            indices3n.append(i3)
-            indices3n.append(i3+1)
-            indices3n.append(i3+2)
-        filtered_vecs = np.take(filtered_vecs, indices3n, axis=1)
-        return np.transpose(self.gram_schmidt(filtered_vecs, 3*len(indices)))
-
-    def is_equal(self, other):
-        """Compares two ENM objects for equality. Useful for unpickling.
-
-        Args:
-            other (ENM): instance of ENM to test.
-
-        Note:
-            This is the general method that subclasses can call in addition to any specifics about their implementation.
-
-        Returns:
-            bool: True if equal, False otherwise.
-        """
-        assert isinstance(other, ENM)
-        if not (self.pickle_version == other.pickle_version and
-                self.atypes_dict == other.atypes_dict and
-                massdefs_dicts_are_same(self.massdefs, other.massdefs) and
-                self.mol.is_equal(other.mol)):
-            return False
-        if len(self.mols) > 1:
-            if not len(self.mols) == len(other.mols):
-                return False
-            for i in range(1, len(self.mols)):
-                if not self.mols[i].is_equal(other.mols[i]):
-                    return False
-        return True
-
     def solve(self):
         """Solves the Hessian matrix to get eigenvectors and eigenvalues.
 
@@ -212,69 +146,31 @@ class ENM(metaclass=abc.ABCMeta):
         self.eigvecs = vecs  # this is a list of vectors (one vector per row)
         return self.eigvals, self.eigvecs
 
-    def _parse_massdefs(self, atypes_list, massdef_list):
-        massdefs = dict()
-        for i, (atypes_file, massdef_file) in enumerate(zip(atypes_list, massdef_list)):
-            assert atypes_file.split('/')[-1].split('.')[0] == massdef_file.split('/')[-1].split('.')[0]
-            resis = self._resis_from_atypes(atypes_file)
-            massdef = MassDef(massdef_file)
-            for r in resis:
-                if r in massdefs:
-                    raise ValueError(
-                        "Trying to add residue {0} twice in a mass definition!".format(r))
-                massdefs[r] = massdef
-        return massdefs
+    def is_equal(self, other):
+        """Compares two ENM objects for equality. Useful for unpickling.
 
-    def _resis_from_atypes(self, atypes):
-        resis = []
-        with open(atypes) as f:
-            lines = f.readlines()
-        for line in lines:
-            resi = line.split('|')[0].strip()
-            if resi != "ADD_TO_ABOVE":
-                resis.append(resi)
-        return resis
+        Args:
+            other (ENM): instance of ENM to test.
 
-    def _build_atypes_dict(self, atypes_list):
-        atd = dict()
-        for filename in atypes_list:
-            d = self._get_atype_dict(filename)
-            for key in d:
-                if key in atd:
-                    raise ValueError(
-                        "Residue {0} was in many atomypes files (2nd of which is {1}".format(key, filename))
-                atd[key] = d[key]
-        return atd
+        Note:
+            This is the general method that subclasses can call in addition to any specifics about their implementation.
 
-    def _get_atype_dict(self, filename):
-        d = dict()
-        with open(filename) as f:
-            lines = f.readlines()
-        for l in lines:
-            ll = l.split('|')
-            resi = ll[0].strip()
-            rest = ll[1].strip()
-            # atoms is a list of 2-element lists : [atom name, atom type number]
-            atoms = [a.strip().split(':') for a in rest.split(',')]
-            if len(resi) > 3 and resi == "ADD_TO_ABOVE":  # line with atom types to add to many residues
-                for atom in atoms:
-                    for key in d:
-                        if atom[0] in d[key]:
-                            raise ValueError("Trying to add atom {0} twice (file {1})".format(atom[0], filename))
-                        d[key][atom[0]] = int(atom[1])
-            elif len(resi) > 3:  # resiname is too long for PDB files
-                raise ValueError(
-                    "unsupported (longer than 3 characters) residue name {0} in file {1}".format(resi, filename))
-            else:  # normal line, one residue
-                if resi in d:
-                    raise ValueError("Trying to add residue {0} 2 times (file {1})".format(resi, filename))
-                d[resi] = dict()
-                for atom in atoms:
-                    if atom[0] in d[resi]:
-                        raise ValueError(
-                            "Trying to add atom {0} 2 times to residue {1} (file {2})".format(atom[0], resi, filename))
-                    d[resi][atom[0]] = int(atom[1])
-        return d
+        Returns:
+            bool: True if equal, False otherwise.
+        """
+        assert isinstance(other, ENM)
+        if not (self.pickle_version == other.pickle_version and
+                        self.atypes_dict == other.atypes_dict and
+                    massdefs_dicts_are_same(self.massdefs, other.massdefs) and
+                    self.mol.is_equal(other.mol)):
+            return False
+        if len(self.mols) > 1:
+            if not len(self.mols) == len(other.mols):
+                return False
+            for i in range(1, len(self.mols)):
+                if not self.mols[i].is_equal(other.mols[i]):
+                    return False
+        return True
 
     def compute_bfactors(self, filter=None):
         """Computes the predicted b-factors.
@@ -413,6 +309,64 @@ class ENM(metaclass=abc.ABCMeta):
             enthal += (0.5 + 1 / (e ** (beta * vi) - 1)) * h * vi
         return enthal
 
+    def get_filtered_eigvecs_mat(self, indices=None, filter=None, transpose=True, n_vecs=None, start=0):
+        """Allows to select subvectors that correspond to certain masses.
+
+        This is useful when there are multiple masses per residue and the user wants to reduce eigenvectors to have
+        1 xyz component per residue, for example. It also allows to select specific indices, which is useful in the
+        case of alignments between slightly different structures.
+
+        Note:
+            The filtered vectors are always orthonormalized.
+
+        Args:
+            indices (list, optional): list of indices to select, from 0 to n-1 (n being the number of masses).
+            filter (set, optional): set of str names of masses to select (corresponding to the names in .masses config
+                                    files).
+            transpose (bool, optional): If True, returns column vectors, otherwise returns row vectors.
+            n_vecs (int, optional): The number of vectors to return, starting from `start`
+            start (int, optional): The first vector to return.
+
+        Returns:
+            numpy.ndarray: the filtered eigenvectors in column format, or row format if `transpose` is False.
+        """
+        if n_vecs is None:
+            n_vecs = len(self.eigvecs)
+        if filter is None:
+            filtered_vecs = self.eigvecs[:n_vecs]
+        else:
+            filtered_vecs = self._get_n_filtered_eigvecs(filter, n_vecs, start=0)
+        if indices is not None:
+            indices3n = []
+            for i in indices:
+                i3 = 3*i
+                indices3n.append(i3)
+                indices3n.append(i3+1)
+                indices3n.append(i3+2)
+            filtered_vecs = np.take(filtered_vecs, indices3n, axis=1)
+        vecs = self.gram_schmidt(filtered_vecs, min(n_vecs, 3*len(indices)))
+        if transpose:
+            return np.transpose(vecs)
+        else:
+            return vecs
+
+    def _get_n_filtered_eigvecs(self, filter, n_vecs, start):
+        masses = self.mol.masses
+        n = len(masses)
+        included = np.zeros((n))
+        for i, m in enumerate(masses):
+            if m[4].split('|')[0].split('.')[-1] in filter:
+                included[i] = 1
+        filtered_eigvecs = np.zeros((3*n, 3*int(np.sum(included))))
+        for i in range(len(self.eigvecs)):
+            eigvec = self.eigvecs[i]
+            current_j = 0
+            for j in range(len(eigvec)):
+                if included[int(np.floor(j/3))] == 1:
+                    filtered_eigvecs[i][current_j] = eigvec[j]
+                    current_j += 1
+        return filtered_eigvecs[start:start+n_vecs]
+
     def build_conf_ensemble(self, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000):
         """Creates a conformational ensemble as a multi-model PDB file.
 
@@ -496,45 +450,124 @@ class ENM(metaclass=abc.ABCMeta):
         self.write_to_filehandle(fh)
         fh.write("ENDMDL\n")
 
+    def _clear_info(self):
+        """Clears the Hessian and row eigenvectors before pickling, to save space.
+        """
+        self.h, self.eigvecs = None, None
+
+    def _reconstitute(self):
+        """Reconstitues the row eigenvectors from the column eigenvectors when building from pickle.
+        """
+        self.eigvecs = np.transpose(self.eigvecs_mat)
+
+    def _parse_massdefs(self, atypes_list, massdef_list):
+        massdefs = dict()
+        for i, (atypes_file, massdef_file) in enumerate(zip(atypes_list, massdef_list)):
+            assert atypes_file.split('/')[-1].split('.')[0] == massdef_file.split('/')[-1].split('.')[0]
+            resis = self._resis_from_atypes(atypes_file)
+            massdef = MassDef(massdef_file)
+            for r in resis:
+                if r in massdefs:
+                    raise ValueError(
+                        "Trying to add residue {0} twice in a mass definition!".format(r))
+                massdefs[r] = massdef
+        return massdefs
+
+    def _resis_from_atypes(self, atypes):
+        resis = []
+        with open(atypes) as f:
+            lines = f.readlines()
+        for line in lines:
+            resi = line.split('|')[0].strip()
+            if resi != "ADD_TO_ABOVE":
+                resis.append(resi)
+        return resis
+
+    def _build_atypes_dict(self, atypes_list):
+        atd = dict()
+        for filename in atypes_list:
+            d = self._get_atype_dict(filename)
+            for key in d:
+                if key in atd:
+                    raise ValueError(
+                        "Residue {0} was in many atomypes files (2nd of which is {1}".format(key, filename))
+                atd[key] = d[key]
+        return atd
+
+    def _get_atype_dict(self, filename):
+        d = dict()
+        with open(filename) as f:
+            lines = f.readlines()
+        for l in lines:
+            ll = l.split('|')
+            resi = ll[0].strip()
+            rest = ll[1].strip()
+            # atoms is a list of 2-element lists : [atom name, atom type number]
+            atoms = [a.strip().split(':') for a in rest.split(',')]
+            if len(resi) > 3 and resi == "ADD_TO_ABOVE":  # line with atom types to add to many residues
+                for atom in atoms:
+                    for key in d:
+                        if atom[0] in d[key]:
+                            raise ValueError("Trying to add atom {0} twice (file {1})".format(atom[0], filename))
+                        d[key][atom[0]] = int(atom[1])
+            elif len(resi) > 3:  # resiname is too long for PDB files
+                raise ValueError(
+                    "unsupported (longer than 3 characters) residue name {0} in file {1}".format(resi, filename))
+            else:  # normal line, one residue
+                if resi in d:
+                    raise ValueError("Trying to add residue {0} 2 times (file {1})".format(resi, filename))
+                d[resi] = dict()
+                for atom in atoms:
+                    if atom[0] in d[resi]:
+                        raise ValueError(
+                            "Trying to add atom {0} 2 times to residue {1} (file {2})".format(atom[0], resi, filename))
+                    d[resi][atom[0]] = int(atom[1])
+        return d
+
     def _print_verbose(self, string):
         if self.verbose:
             print(string)
 
-    def get_masses(self):
-        return self.mol.masses
-
     def get_n_masses(self):
+        """Gives the number of masses in the ENM.
+
+        Returns:
+            int: the number of masses in the ENM.
+        """
         return len(self.mol.masses)
 
     def get_xyz(self):
+        """Gives the x,y,z coordinates of the masses in the form of an Nx3 matrix.
+
+        Returns:
+            numpy.ndarray: Nx3 matrix of x,y,z coordinates of the masses.
+        """
         return self.mol.get_xyz()
 
     def get_filtered_xyz(self, filter):
+        """Gives the x,y,z coordinates of selected masses in the form of an Nx3 matrix.
+
+        Args:
+            filter (set): set of str names of masses to select (corresponding to the names in .masses config
+                          files).
+        Returns:
+            numpy.ndarray: Nx3 matrix of x,y,z coordinates of the selected masses.
+        """
         return self.mol.get_filtered_xyz(filter)
 
     def get_filtered_3n_vector(self, filter):
+        """Gives the x,y,z coordinates of selected masses in the form of a single vector.
+
+        Note:
+            The vector is in the format: [x1, y1, z1, x2, y2, z2, ..., xN, yN, zN].
+
+        Args:
+            filter (set): set of str names of masses to select (corresponding to the names in .masses config
+                          files).
+        Returns:
+            The 3N-dimensional vector of coordinates for the selected masses.
+        """
         return self.mol.get_filtered_3n_vector(filter)
-
-    def get_n_filtered_eigvecs(self, filter, n_vecs, start=6):
-        masses = self.get_masses()
-        n = len(masses)
-        included = np.zeros((n))
-        for i, m in enumerate(masses):
-            if m[4].split('|')[0].split('.')[-1] in filter:
-                included[i] = 1
-        filtered_eigvecs = np.zeros((3*n, 3*int(np.sum(included))))
-        for i in range(len(self.eigvecs)):
-            eigvec = self.eigvecs[i]
-            current_j = 0
-            for j in range(len(eigvec)):
-                if included[int(np.floor(j/3))] == 1:
-                    filtered_eigvecs[i][current_j] = eigvec[j]
-                    current_j += 1
-        return filtered_eigvecs[start:start+n_vecs]
-
-    def get_n_filtered_eigvecs_orthonorm(self, filter, n_vecs, start=6):
-        filtered = self.get_n_filtered_eigvecs(filter, 3*len(self.mol.masses)-start, start=start)
-        return self.gram_schmidt(filtered, n_vecs)
 
     def set_bfactors(self, vector):
         """ Sets the bfactors of all atoms in the file. Vector needs to be the same length as the number of masses.

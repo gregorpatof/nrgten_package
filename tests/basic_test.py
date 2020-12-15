@@ -20,10 +20,10 @@ class MainTest(unittest.TestCase):
         self.assertAlmostEqual(self.medium.compute_vib_entropy(), 504.8449418766389)
 
     def test_eigenvalues(self):
-        """ Ensuring ENCoM consistency
+        """Ensuring ENCoM consistency
 
-            The passing of this test ensures that the ENCoM model implemented here is the same as
-            in the 2014 Frappier-Najmanovich paper (doi: ﻿10.1371/journal.pcbi.1003569)
+        The passing of this test ensures that the ENCoM model implemented here is the same as in the 2014 Frappier &
+        Najmanovich paper (doi: ﻿10.1371/journal.pcbi.1003569)
         """
         expected_first10_eigvals = [395.13213997, 705.84751463, 1051.3377265, 1717.77386711, 2334.71773081,
                              3180.41535126, 3367.29667647, 3732.73424169, 4395.60062344, 5646.29249956]
@@ -70,11 +70,6 @@ class MainTest(unittest.TestCase):
         for i in range(15):
             diff = abs(computed[i] - expected[i])
             self.assertLess(diff/expected[i], tolerance)
-
-
-
-
-
 
 
 if __name__ == "__main__":

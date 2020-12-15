@@ -14,6 +14,7 @@ Welcome to NRGTEN's documentation!
    install_guide
    typical_uses
    advanced_uses
+   code_doc
    troubleshooting
 
 

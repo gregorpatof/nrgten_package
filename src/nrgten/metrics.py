@@ -8,62 +8,6 @@ from scipy.stats import pearsonr
 from multiprocessing import Pool, current_process
 
 
-def build_conf_ensemble(enm, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000):
-    """ Has the same functionality (better name) as the old ENCoM executable build_grid_rmsd.
-        Creates a conformational ensemble by making every combination of the selected modes at every given rmsd step,
-        up to a total deformation of max_displacement for each mode (and in both directions). Writes the output as
-        a multi-model pdb file.
-        Important note: the mode indices in the modes_list are assumed to start at 1, with the first nontrivial mode
-        thus being at index 7.
-    """
-    assert isinstance(modes_list, list)
-    grid_side = 1 + (2*max_displacement / step) # length of one side of the grid
-    if abs((grid_side - 0.999999999999) % 2) > 0.000001: # make sure that small floating point errors are ignored
-        raise ValueError("build_conf_ensemble was executed with step={0} and max_displacement={1}. max_displacement " +
-                         "has to be a multiple of step.".format(step, max_displacement))
-    grid_side = int(round(grid_side))
-    grid_side = int(grid_side)
-    n_conf = int(grid_side ** len(modes_list)) # total number of points, or conformations, in the grid
-    if n_conf > max_conformations:
-        raise ValueError("build_conf_ensemble was executed with parameters specifying {0} conformations with " +
-                         "max_conformations set at {1}. If you really want that many conformations, set " +
-                         "max_conformations higher.".format(n_conf, max_conformations))
-    eigvecs_list = []
-    for mode_index in modes_list:
-        if mode_index < 7:
-            raise ValueError("build_conf_ensemble was run with mode index {0} in the modes_list, which is a trivial " +
-                             "(rotational/translational) motion.".format(mode_index))
-        eigvecs_list.append(np.copy(enm.eigvecs[mode_index+5]))
-        modermsd = rmsd_of_3n_vector(eigvecs_list[-1])
-        eigvecs_list[-1] /= modermsd
-    with open(filename, "w") as fh:
-        fh.write("REMARK Conformational ensemble written by nrgens.metrics.build_conf_ensemble()\n" +
-                 "REMARK from the nrgens Python package, copyright Najmanovich Research Group 2020\n" +
-                 "REMARK This ensemble contains {0} conformations\n".format(n_conf))
-        for i in range(n_conf):
-            write_one_point(enm, eigvecs_list, i, grid_side, step, fh)
-        fh.write("END\n")
-
-
-def write_one_point(enm, eigvecs_list, conf_n, grid_side, step, fh):
-    """ Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1. This function computes
-        contributions from every mode automatically, translates the enm coordinates, and resets it back to original
-        after having written one model to the filehandle fh.
-    """
-    nsteps_list = []
-    for i in range(len(eigvecs_list)):
-        nsteps = conf_n % grid_side
-        conf_n -= nsteps
-        conf_n /= grid_side
-        nsteps_list.append(nsteps - (grid_side - 1) / 2)
-    t_vect = np.zeros(len(eigvecs_list[0]))
-    for vec, nsteps in zip(eigvecs_list, nsteps_list):
-        t_vect += vec * nsteps * step
-    enm.translate_3n_vector(t_vect)
-    write_model(enm, int(conf_n+1), fh)
-    enm.translate_3n_vector(-t_vect)
-
-
 def get_pa_pi(enm_a, enm_i, beta=1, alignment=None):
     """ Computes Pa and Pi, the respective 'probabilities' of reaching the active state from the inactive state and vice
         versa. Beta is the Boltzmann scaling factor.
@@ -463,7 +407,7 @@ def test_jernigan(filename, enm, kwlist=None):
         print(kwlist)
         model = enm(filename, **kwlist)
     vals, vecs = pca_ensemble(model, filter={"P"})
-    return cumulative_overlap(vecs[0], model.get_n_filtered_eigvecs_orthonorm({"P"}, 20))
+    return cumulative_overlap(vecs[0], model.get_filtered_eigvecs_mat(filter={"P"}, transpose=False, n_vecs=20, start=6))
 
 
 def test_entropy(factor=1):

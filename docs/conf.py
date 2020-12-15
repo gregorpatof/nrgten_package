@@ -40,8 +40,6 @@ sys.path.insert(0, os.path.abspath('../src'))
 
 extensions = ['sphinx_rtd_theme', 'sphinx.ext.napoleon']
 
-autodoc_mock_imports = ["numpy"]
-
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 

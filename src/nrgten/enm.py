@@ -6,7 +6,7 @@ import abc
 
 
 class ENM(metaclass=abc.ABCMeta):
-    """Abstract base class (ABC) for Elastic Network Models (ENMs). testtest
+    """Abstract base class (ABC) for Elastic Network Models (ENMs).
 
     The ENM class implements methods that are common for all implemented ENMs (ENCoM, ANM and STeM as of this writing)
     as well as the basic constructor. Subclasses are responsible for implementing the build_hessian() method (which
@@ -54,6 +54,7 @@ class ENM(metaclass=abc.ABCMeta):
                                        of 3.
         """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
+        print("this is a test")
         assert len(self.dirpath) > 0
         self.verbose = verbose
         self.pickle_version = "no clearing of macromol"
@@ -344,7 +345,7 @@ class ENM(metaclass=abc.ABCMeta):
                 indices3n.append(i3+1)
                 indices3n.append(i3+2)
             filtered_vecs = np.take(filtered_vecs, indices3n, axis=1)
-        vecs = self.gram_schmidt(filtered_vecs, min(n_vecs, 3*len(indices)))
+        vecs = self._gram_schmidt(filtered_vecs, min(n_vecs, 3*len(indices)))
         if transpose:
             return np.transpose(vecs)
         else:
@@ -433,9 +434,9 @@ class ENM(metaclass=abc.ABCMeta):
         t_vect = np.zeros(len(eigvecs_list[0]))
         for vec, nsteps in zip(eigvecs_list, nsteps_list):
             t_vect += vec * nsteps * step
-        self.translate_3n_vector(t_vect)
+        self._translate_3n_vector(t_vect)
         self._write_model(int(model_n + 1), fh)
-        self.translate_3n_vector(-t_vect)
+        self._translate_3n_vector(-t_vect)
 
     def _rmsd_of_3n_vector(self, vec):
         dists = np.zeros((int(len(vec) / 3)))
@@ -447,7 +448,7 @@ class ENM(metaclass=abc.ABCMeta):
         """ Writes one model to the given filehandle, with model number count.
         """
         fh.write("MODEL     {:>4}\n".format(count))
-        self.write_to_filehandle(fh)
+        self._write_to_filehandle(fh)
         fh.write("ENDMDL\n")
 
     def _clear_info(self):
@@ -570,14 +571,21 @@ class ENM(metaclass=abc.ABCMeta):
         return self.mol.get_filtered_3n_vector(filter)
 
     def set_bfactors(self, vector):
-        """ Sets the bfactors of all atoms in the file. Vector needs to be the same length as the number of masses.
+        """Sets the b-factors of all atoms in the file.
+
+        Args:
+            vector (list): the new b-factors, needs to be the same length as the number of masses.
         """
         assert self.get_n_masses() == len(vector)
         self.mol.set_bfactors(vector)
 
     def write_dynamical_signature(self, outfile):
-        """ Writes a 'dynamical signature', which is the predicted b_factor at
-            every mass, to the specified output file.
+        """Writes a 'dynamical signature' to the output file specified.
+
+        The dynamical signature is simply the predicted b_factor at every mass.
+
+        Args:
+            outfile: the output file.
         """
         if not hasattr(self, "bfacts"):
             self.compute_bfactors()
@@ -588,50 +596,29 @@ class ENM(metaclass=abc.ABCMeta):
             for i in range(len(masses)):
                 f.write("{0}\t{1}\n".format(masses[i][4], bfacts[i]))
 
-    def write_normalized_dynamical_signature(self, outfile, total=1, type="amino_acids"):
-        """ Writes a normalized 'dynamical signature', summing to parameter total.
-        """
-        if not hasattr(self, "bfacts"):
-            self.compute_bfactors()
-        masses = self.mol.masses
-        bfacts = self.bfacts
-        assert len(masses) == len(bfacts)
-        kept_bfacts = []
-        kept_masses = []
-        for i, m in enumerate(masses):
-            if m[5].name == type:
-                kept_bfacts.append(bfacts[i])
-                kept_masses.append(masses[i])
-        kept_bfacts = np.array(kept_bfacts)
-        kept_bfacts /= np.sum(kept_bfacts)
-        kept_bfacts *= total
-        with open(outfile, "w") as f:
-            for i in range(len(kept_masses)):
-                f.write("{0}\t{1}\n".format(kept_masses[i][4], kept_bfacts[i]))
-
-    def write_to_file(self, filename):
+    def _write_to_file(self, filename):
         self.mol.write_to_file(filename)
 
-    def write_to_filehandle(self, fh):
+    def _write_to_filehandle(self, fh):
         self.mol.write_to_filehandle(fh)
 
-    def translate_3n_matrix(self, vector):
+    def _translate_3n_matrix(self, vector):
         self.mol.translate_3n_matrix(vector)
         self.mol.update()
 
-    def translate_3n_vector(self, vector):
+    def _translate_3n_vector(self, vector):
         self.mol.translate_3n_vector(vector)
         self.mol.update()
 
-    def translate_xyz(self, vector):
+    def _translate_xyz(self, vector):
         self.mol.translate_xyz(vector)
         self.mol.update()
 
-    def rotate(self, rotation_mat):
+    def _rotate(self, rotation_mat):
         self.mol.rotate(rotation_mat)
         self.mol.update()
 
-    def gram_schmidt(self, vectors, target_n):
+    def _gram_schmidt(self, vectors, target_n):
         """ From https://gist.github.com/iizukak/1287876/edad3c337844fac34f7e56ec09f9cb27d4907cc7#gistcomment-1871542.
             Gram-schmidt orthonormalization of row vectors.
         """

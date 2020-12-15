@@ -51,12 +51,12 @@ def fit(reference, target, filter=None):
     """
     ref_xyz = reference.get_filtered_xyz(filter)
     rmsd, r, transvec = rmsd_kabsch(ref_xyz, target.get_filtered_xyz(filter))
-    target.rotate(r)
-    target.translate_xyz(transvec)
+    target._rotate(r)
+    target._translate_xyz(transvec)
     targ_xyz = target.get_filtered_xyz(filter)
     conf_change = np.array(listify(np.subtract(targ_xyz, ref_xyz)))
-    target.translate_xyz(-transvec)
-    target.rotate(np.transpose(r))
+    target._translate_xyz(-transvec)
+    target._rotate(np.transpose(r))
     return conf_change
 
 
@@ -209,8 +209,8 @@ def rmsip(ref_vectors, vectors_list):
 
 def fit_to_reference_macromol_DEPRECATED(ref, target):
     rmsd, r, transvec = rmsd_kabsch(ref.masscoords, target.masscoords)
-    target.rotate(r)
-    target.translate_xyz(transvec)
+    target._rotate(r)
+    target._translate_xyz(transvec)
     return rmsd
 
 
@@ -239,7 +239,7 @@ def motion(enm, mode_index, stepsize, maxrmsd, filename):
             if i == 3:
                 offset = 1
             for i in range(nsteps - offset):
-                enm.translate_3n_vector(mode)
+                enm._translate_3n_vector(mode)
                 write_model(enm, count, fh)
                 count += 1
 
@@ -412,16 +412,16 @@ def test_jernigan(filename, enm, kwlist=None):
 
 def test_entropy(factor=1):
     enc_1caa = ENCoM("unit-tests/delta_s/1caa_trimmed.pdb")
-    ref_ent = enc_1caa.compute_vib_entropy_nussinov(factor=factor)
+    ref_ent = enc_1caa.compute_vib_entropy(factor=factor)
     pdbs = glob.glob("unit-tests/delta_s/*.pdb")
     old_nussinov = np.zeros((3, 4))
     for i, pdb in enumerate(pdbs):
         print(pdb)
         enc = ENCoM(pdb, ignore_hetatms=True)
-        initial, nussi = enc.compute_vib_entropy(), enc.compute_vib_entropy_nussinov(factor=factor)
+        initial, nussi = enc.compute_vib_entropy(), enc.compute_vib_entropy(factor=factor)
         print(initial, nussi, nussi/ref_ent)
         old_nussinov[0][i] = enc.compute_vib_entropy()
-        old_nussinov[1][i] = enc.compute_vib_entropy_nussinov(factor=factor)
+        old_nussinov[1][i] = enc.compute_vib_entropy(factor=factor)
         old_nussinov[2][i] = enc.get_n_masses()
     return old_nussinov
 
@@ -439,8 +439,8 @@ def test_entropy_bfacts(factor=1):
             break
         enc = ENCoM("{0}/{1}.pdb".format(basedir, code), ignore_hetatms=True, use_pickle=True)
         old_nussinov[0][i] = enc.compute_vib_entropy()
-        old_nussinov[1][i] = enc.compute_vib_entropy_nussinov(factor=factor)
-        old_nussinov[2][i] = enc.compute_vib_enthalpy_nussinov()
+        old_nussinov[1][i] = enc.compute_vib_entropy(factor=factor)
+        old_nussinov[2][i] = enc.compute_vib_enthalpy()
         old_nussinov[3][i] = enc.get_n_masses()
     return old_nussinov
 

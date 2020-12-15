@@ -1,4 +1,4 @@
-# nrgten_package
+# NRGTEN
 Najmanovich Research Group Toolkit for Elastic Networks
 
 NRGTEN is not yet uploaded to PyPi (it will be in the coming week). If you wish to install it as a package before that, simply clone this repository:

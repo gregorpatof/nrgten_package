@@ -21,4 +21,4 @@ sh install_nrgten.sh
 
 This will work on both Linux and Mac OS. For Windows the commands might be a little different (full Windows support will come when the package is on PyPi).
 
-The documentation is hosted here: 
+The documentation is hosted here: https://nrgten.readthedocs.io/en/latest

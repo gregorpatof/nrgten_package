@@ -33,6 +33,9 @@
 # ones.
 
 import sphinx_rtd_theme
+import sys
+
+sys.path.insert(0, os.path.abspath('../src'))
 
 extensions = ['sphinx_rtd_theme', 'sphinx.ext.napoleon']
 

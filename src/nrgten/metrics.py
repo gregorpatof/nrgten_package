@@ -8,41 +8,42 @@ from scipy.stats import pearsonr
 from multiprocessing import Pool, current_process
 
 
-def get_pa_pi(enm_a, enm_i, beta=1, alignment=None):
-    """ Computes Pa and Pi, the respective 'probabilities' of reaching the active state from the inactive state and vice
-        versa. Beta is the Boltzmann scaling factor.
-        Returns Pa, Pi, R (R = Pi/Pa, the inactivation ratio)
-        Alignment is a list of 2 lists of matching indices. Example:
-        The alignment of sequences
-        enm_a: -XYY--Z
-        enm_i: ZXYYXXZ
-        would give alignment=[[0,1,2,3],[1,2,3,6]]
+def get_transit_probs(enm_a, enm_b, gamma=1, alignment=None):
+    """Computes the transition 'probabilities' of reaching state B from state A and vice versa.
+
+    Args:
+        enm_a (ENM): The ENM object representing state A.
+        enm_b (ENM): The ENM object representing state B.
+        gamma (float, optional): The Boltzmann scaling factor.
+        alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
+                                    enm_a: -XYY--Z and enm_i: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+
+    Returns:
+        tuple: tuple containing:
+            p_a(float) the probability of reaching state A from state B
+            p_b(float) the probability of reaching state B from state A
     """
     vals_a = enm_a.eigvals[6:]
-    vals_i = enm_i.eigvals[6:]
+    vals_b = enm_b.eigvals[6:]
     if alignment is None:
-        assert len(vals_a) == len(vals_i)
+        assert len(vals_a) == len(vals_b)
     else:
         assert len(alignment[0]) == len(alignment[1])
-        assert len(vals_a) >= len(alignment[0])*3-6 and len(vals_i) >= len(alignment[0])*3-6
-    pjs_a = np.exp(-1 * np.array(vals_a)/beta)
-    pjs_i = np.exp(-1 * np.array(vals_i)/beta)
+        assert len(vals_a) >= len(alignment[0])*3-6 and len(vals_b) >= len(alignment[0])*3-6
+    pjs_a = np.exp(-1 * np.array(vals_a) / gamma)
+    pjs_b = np.exp(-1 * np.array(vals_b) / gamma)
     pjs_a /= np.sum(pjs_a)
-    pjs_i /= np.sum(pjs_i)
+    pjs_b /= np.sum(pjs_b)
     if alignment is None:
-        overlaps_a = overlap(enm_i, enm_a, len(vals_a))
-        overlaps_i = overlap(enm_a, enm_i, len(vals_a))
+        overlaps_a = overlap(enm_b, enm_a, len(vals_a))
+        overlaps_b = overlap(enm_a, enm_b, len(vals_a))
     else:
-        overlaps_a = overlap_alignment(enm_i, enm_a, len(alignment[0])*3-6, [alignment[1], alignment[0]])
-        overlaps_i = overlap_alignment(enm_a, enm_i, len(alignment[0])*3-6, alignment)
+        overlaps_a = overlap_alignment(enm_b, enm_a, len(alignment[0]) * 3 - 6, [alignment[1], alignment[0]])
+        overlaps_b = overlap_alignment(enm_a, enm_b, len(alignment[0]) * 3 - 6, alignment)
     n = len(overlaps_a)
-    pa = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_a, pjs_a[:n])]))
-    pi = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_i, pjs_i[:n])]))
-    # print(overlaps_a)
-    # print(overlaps_i)
-    # pa = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_a, pjs_a)]))
-    # pi = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_i, pjs_i)]))
-    return pa, pi, pi/pa
+    p_a = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_a, pjs_a[:n])]))
+    p_b = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_b, pjs_b[:n])]))
+    return p_a, p_b
 
 
 def fit(reference, target, filter=None):

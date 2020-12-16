@@ -8,6 +8,4 @@ Detailed code documentation
 	enm
 	encom
 	anm
-	stem
-	macromol
 	metrics

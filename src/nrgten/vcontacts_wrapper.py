@@ -93,11 +93,11 @@ def try_to_compile_vcon(libpath):
     args = []
     args2 = None
     if op_system == "Windows":
-        args = ['cl.exe', '/LD', str(libpath.joinpath('Vcontacts-v1.2_for_python.c'))]
+        args = ['cl.exe', '/LD', str(libpath.joinpath('Vcontacts-v1.2_for_python_windows.c'))]
         args2 = ['cp', 'Vcontacts-v1.2_for_python.dll', str(libpath.joinpath('vconlib.dll'))]
     elif op_system == "Darwin" or op_system == "Linux":
         args = ['gcc', '-shared', '-o', str(libpath.joinpath('vconlib.so')),
-                '-fPIC', '-fdeclspec', str(libpath.joinpath('Vcontacts-v1.2_for_python.c'))]
+                '-fPIC', str(libpath.joinpath('Vcontacts-v1.2_for_python.c'))]
     else:
         raise ValueError("Unrecognized operating system: {0}".format(op_system))
     subprocess.call(args)

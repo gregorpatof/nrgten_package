@@ -54,7 +54,6 @@ class ENM(metaclass=abc.ABCMeta):
                                        of 3.
         """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
-        print("this is a test")
         assert len(self.dirpath) > 0
         self.verbose = verbose
         self.pickle_version = "no clearing of macromol"

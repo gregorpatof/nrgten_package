@@ -7,19 +7,74 @@ from nrgten.enm import ENM
 
 
 class ENCoM(ENM):
-    """ Elastic Network Contact Model, version 2.0. A coarse-grained normal
-        mode analysis model applicable to proteins, nucleic acids and their
-        complexes by default, and easily extendable to any macromolecule/small
-        molecule.
-    """
+    """Class implementing the latest version of ENCoM (Elastic Network Contact Model).
 
-    def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False,
-                 interact_const=3, power_dependenceV4=4, interact_mat=None, added_atypes=None, added_massdef=None,
-                 atypes_list=None, massdef_list=None, verbose=False, use_stem=False, kphi1=1, kphi3=0.5, solve=True,
-                 ignore_hetatms=False, use_pickle=False, solve_mol=True, bfact_params=False, one_mass=False):
-        """ pdb_file: string path to the PDB-formatted file to read
-            vconpath: string path to the Vcontacts executable (should eventually
-                      be part of the Python code)
+        It extends the `ENM` class, implementing its own build_hessian(), pickle() and build_from_pickle() methods. See
+        ENM class for the attributes it inherits. For details about the ENCoM model, see the 2014 Frappier and
+        Najmanovich paper: www.doi.org/10.1371/journal.pcbi.1003569
+
+        Note:
+            This class also implements the STeM model (Generalized Spring Tensor Model, on which ENCoM is based). The
+            original STeM paper can be found here: https://doi.org/﻿10.1186/1472-6807-10-S1-S3
+
+        Attributes:
+            dirpath (str): The absolute path to the directory containing the encom.py module.
+            use_stem (bool): If True, the model reverts back to STeM.
+            pd (float): The power dependency of the long-range interaction.
+            kr (float): The weight of the first term (bond stretching) from the ENCoM potential.
+            ktheta (float): The weight of the second term (angle bending) from the ENCoM potential.
+            kphi (float): The weight of the third term (torsion angles) from the ENCoM potential.
+            epsi (float): The weight of the fourth term (long-range interactions) from the ENCoM potential.
+            bfact_params (bool): If True, the best parameters for b-factor prediction (according to the 2014 paper)
+                                 are used
+            ic (float): The interaction constant for favorable pairs of atom types.
+            inter_mat (list): The interaction matrix for atom types, in a list of lists format where every first
+                              element is None (to allow indexing starting at 1 instead of 0).
+            V1_H (numpy.ndarray): The Hessian for the 1st potential term (bond stratching).
+            V2_H (numpy.ndarray): The Hessian for the 2nd potential term (angle bending).
+            V3_H (numpy.ndarray): The Hessian for the 3rd potential term (torsion angles).
+            V4_H (numpy.ndarray): The Hessian for the 4th potential term (long-range interactions).
+            bij (numpy.ndarray): Matrix of the Bij term in the ENCoM potential, which is the modulating factor for the
+                                 long-range interaction (V4)
+        """
+
+    def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=3,
+                 power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
+                 added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
+                 ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False):
+        """Constructor for the ENCoM class.
+
+        Args:
+            pdb_file (str): The PDB file to read.
+            kr (float, optional): The weight of the first term (bond stretching) from the ENCoM potential.
+            ktheta (float, optional): The weight of the second term (angle bending) from the ENCoM potential.
+            kphi (float, optional): The weight of the third term (torsion angles) from the ENCoM potential.
+            epsi (float, optional): The weight of the fourth term (long-range interactions) from the ENCoM potential.
+            apply_epsi (bool, optional): If True, the other constants are multiplied by epsi.
+            interact_const (float, optional): The interaction constant for favorable pairs of atom types.
+            power_dependenceV4 (float, optional): The power dependency of the long-range interaction.
+            interact_mat (list, optional): The interaction matrix for atom types, in a list of lists format where every
+                                           first element is None (to allow indexing starting at 1 instead of 0).
+            use_stem (bool, optional): If True, the model reverts back to STeM (on which ENCoM is based).
+            kphi1 (float, optional): Scales the kphi constant.
+            kphi3 (float, optional): Scales the kphi constant.
+            bfact_params (bool, optional): If True, the best parameters for b-factor prediction (according to the 2014
+                                           paper) are used.
+            added_atypes (list, optional): list of .atypes configuration files to add.
+            added_massdef (list, optional): list of .masses configuration files to add.
+            atypes_list (list, optional): If supplied, the default .atypes configuration files are ignored and these
+                                          are the only ones read.
+            massdef_list (list, optional): If supplied, the default .masses configuration files are ignored and these
+                                           are the only ones read.
+            verbose (bool, optional): Triggers the verbose mode.
+            solve (bool, optional): If True, the Hessian matrix will be built and solved.
+            use_pickle (bool, optional): If True, the ENM object will be solved only once and subsequently built from
+                                         its pickled representation. Uses a lot of disk space for large systems.
+            ignore_hetatms (bool, optional): Flag to ignore HETATM records in the PDB file.
+            solve_mol (bool, optional): If True, the underlying Macromol object will be solved, i.e. the connectivity
+                                        of the residues will be inferred.
+            one_mass (bool, optional): If True, nucleic acids will be built using only one mass per nucleotide instead
+                                       of 3.
         """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
         assert len(self.dirpath) > 0
@@ -43,14 +98,16 @@ class ENCoM(ENM):
         self.ktheta = ktheta
         self.kphi = kphi
         self.epsi = epsi
+        self.ic = interact_const
         self.bfact_params = bfact_params
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
             self.kr = 1000
             self.ktheta = 100000
             self.kphi = 1000
             self.epsi = 100
+            self.ic = 3
         if interact_mat is None:
-            ic = interact_const
+            ic = self.ic
             # Presence of None is to enable indexing using the 1-8 numbers from Sobolev et al
             interact_mat = [[None] * 9,
                             [None, ic, ic, ic, 1, ic, ic, ic, ic],
@@ -69,17 +126,25 @@ class ENCoM(ENM):
                          massdef_list=massdef_list, verbose=verbose, solve=solve, ignore_hetatms=ignore_hetatms,
                          use_pickle=use_pickle, solve_mol=solve_mol, one_mass=one_mass)
 
-    def get_pickle_file(self):
-        if self.bfact_params:
-            pickle_file = self.pdb_file.split('.')[0] + ".encom_bfacts.pickle"
+    def _get_pickle_file(self):
+        pickle_file = self.pdb_file.split('.')[0]
+        if self.use_stem:
+            pickle_file += ".stem.pickle"
+        elif self.bfact_params:
+            pickle_file += ".encom_bfacts.pickle"
         elif self.one_mass:
-            pickle_file = self.pdb_file.split('.')[0] + ".encom_1n.pickle"
+            pickle_file += ".encom_1n.pickle"
         else:
-            pickle_file = self.pdb_file.split('.')[0] + ".encom.pickle"
+            pickle_file += ".encom.pickle"
         return pickle_file
 
     def build_from_pickle(self):
-        pickle_file = self.get_pickle_file()
+        """Builds an ENCoM object from its pickled state.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        pickle_file = self._get_pickle_file()
         if not os.path.isfile(pickle_file):
             return False
         try:
@@ -102,13 +167,20 @@ class ENCoM(ENM):
         return True
 
     def pickle(self):
+        """Builds a pickled state from the ENCoM object.
+        """
         self.V1_H, self.V2_H, self.V3_H, self.V4_H, self.bij = None, None, None, None, None
         super()._clear_info()
-        pickle_file = self.get_pickle_file()
+        pickle_file = self._get_pickle_file()
         with open(pickle_file, 'wb') as f:
             pickle.dump(self, f)
 
     def build_hessian(self):
+        """Builds the Hessian matrix.
+
+        Returns:
+            The Hessian matrix.
+        """
         if not self.mol.solved:
             self.mol.solve()
         masses = self.mol.masses
@@ -116,26 +188,23 @@ class ENCoM(ENM):
         bends = self.mol.bends
         torsions = self.mol.torsions
         resis = self.mol.resis
-        self.V1_H = self.build_V1_hessian(masses, connect)
-        self.V2_H = self.build_V2_hessian(masses, bends)
-        self.V3_H = self.build_V3_hessian(masses, torsions)
-        self.V4_H = self.build_V4_hessian(masses, resis)
-        V_tot = self.sum_hessians()
+        self.V1_H = self._build_V1_hessian(masses, connect)
+        self.V2_H = self._build_V2_hessian(masses, bends)
+        self.V3_H = self._build_V3_hessian(masses, torsions)
+        self.V4_H = self._build_V4_hessian(masses, resis)
+        V_tot = self._sum_hessians()
         return V_tot
 
-    def sum_hessians(self):
+    def _sum_hessians(self):
         return np.add(np.add(np.add(self.V1_H, self.V2_H), self.V3_H), self.V4_H)
 
-    def sum_hessians_V1_V3_V4(self):
-        return np.add(np.add(self.V1_H, self.V3_H), self.V4_H)
-
-    def build_V1_hessian(self, masses, connect_mat):
+    def _build_V1_hessian(self, masses, connect_mat):
         n = len(masses)
         hessian = np.zeros((3 * n, 3 * n))
         for i in range(n):
             for j in range(i + 1, n):
                 if connect_mat[i][j] != 0:
-                    dist = distance(masses[i], masses[j])
+                    dist = _distance(masses[i], masses[j])
                     dist_sq = dist ** 2
 
                     # diagonal of the off-diagonal 3x3 element and update diagonal of diagonal element
@@ -157,7 +226,7 @@ class ENCoM(ENM):
                 hessian[j][i] = hessian[i][j]
         return hessian
 
-    def build_V2_hessian(self, masses, bends):
+    def _build_V2_hessian(self, masses, bends):
         n = len(masses)
         hessian = np.zeros((3 * n, 3 * n))
         axes = ["X", "Y", "Z"]
@@ -192,10 +261,10 @@ class ENCoM(ENM):
                 co[ax + "j"] - co[ax + "i"]) -
                                  dot * norm_poverq * (co[ax + "j"] - co[ax + "k"])) / prod_norms_sq
             doubles = [x for x in zip(bend, indexes)]
-            self.hessian_helper_V2V3(hessian, doubles, dGd, const)
+            self._hessian_helper_V2V3(hessian, doubles, dGd, const)
         return hessian
 
-    def hessian_helper_V1V4(self, hessian, doubles, bcoord, const):
+    def _hessian_helper_V1V4(self, hessian, doubles, bcoord, const):
         axes = ["X", "Y", "Z"]
         for a in range(len(doubles)):
             for b in range(len(doubles)):
@@ -213,7 +282,7 @@ class ENCoM(ENM):
                         hessian[3 * i_n + a_n][3 * j_n + b_n] += sign * const * bcoord[a_str] * bcoord[b_str]
         return hessian
 
-    def hessian_helper_V1V4_optim(self, hessian, i, j, bcoord, const):
+    def _hessian_helper_V1V4_optim(self, hessian, i, j, bcoord, const):
         """ This code was generated with func_writer.py
         """
         i3 = 3 * i
@@ -255,7 +324,7 @@ class ENCoM(ENM):
         hessian[j3 + 2][j3 + 1] += const * bcoord["Z"] * bcoord["Y"]
         hessian[j3 + 2][j3 + 2] += const * bcoord["Z"] * bcoord["Z"]
 
-    def hessian_helper_V2V3(self, hessian, doubles, dGd, const):
+    def _hessian_helper_V2V3(self, hessian, doubles, dGd, const):
         axes = ["X", "Y", "Z"]
         for a in range(len(doubles)):
             for b in range(len(doubles)):  # a and b are combinations of indexes : ii, ij, ik, etc...
@@ -268,7 +337,7 @@ class ENCoM(ENM):
                         hessian[3 * i_n + a_n][3 * j_n + b_n] += const * dGd[a_str + i_str] * dGd[b_str + j_str]
         return hessian
 
-    def build_V3_hessian(self, masses, torsions):
+    def _build_V3_hessian(self, masses, torsions):
         n = len(masses)
         hessian = np.zeros((3 * n, 3 * n))
         axes = ["X", "Y", "Z"]
@@ -305,18 +374,18 @@ class ENCoM(ENM):
                     dGd[key] = ((np.dot(dv1d[key], v2) + np.dot(dv2d[key], v1)) * prod_norms - dotv1v2 * (
                     dnorm_v1d[key] * norm_v2 + dnorm_v2d[key] * norm_v1)) / G_const
             doubles = [x for x in zip(torsion, indexes)]
-            self.hessian_helper_V2V3(hessian, doubles, dGd, const)
+            self._hessian_helper_V2V3(hessian, doubles, dGd, const)
         return hessian
 
-    def build_V4_hessian(self, masses, resis):
+    def _build_V4_hessian(self, masses, resis):
         n = len(masses)
-        bij = self.compute_Bij(masses, resis)
+        bij = self._compute_Bij(masses, resis)
         hessian = np.zeros((3 * n, 3 * n))
         axes = ["X", "Y", "Z"]
         indexes = ["i", "j"]
         for i in range(n):
             for j in range(i + 1, n):
-                if self.is_long_range(i, j):
+                if self._is_long_range(i, j):
                     self._print_verbose((i, j))
                     distij = self.mol.distmat[i][j]
                     bcoord = dict()  # corresponds to bx, by and bz in STeM.m
@@ -329,11 +398,11 @@ class ENCoM(ENM):
                         const = 120 * (self.epsi + bij[i][j]) / distij_pd
                     doubles = [x for x in zip([i, j], indexes)]
                     # self.hessian_helper_V1V4(hessian, doubles, bcoord, const)
-                    self.hessian_helper_V1V4_optim(hessian, i, j, bcoord, const)
+                    self._hessian_helper_V1V4_optim(hessian, i, j, bcoord, const)
         self.bij = bij
         return hessian
 
-    def get_weighted_surf_atomnum(self, sd, num_a, num_b, resi_a, resi_b, anums_dict):
+    def _get_weighted_surf_atomnum(self, sd, num_a, num_b, resi_a, resi_b, anums_dict):
         try:
             i = self.atypes_dict[resi_a][anums_dict[num_a].name]
         except KeyError:
@@ -346,7 +415,7 @@ class ENCoM(ENM):
             return 0
         return sd[num_a][num_b] * self.inter_mat[i][j]
 
-    def get_total_surf_atomnum(self, sd, anums_list, i, j, resi_a, resi_b, anums_dict):
+    def _get_total_surf_atomnum(self, sd, anums_list, i, j, resi_a, resi_b, anums_dict):
         if resi_a == "LIG" and resi_b == "ASP":
             dum = 0
         surf_tot = 0
@@ -354,24 +423,16 @@ class ENCoM(ENM):
             for num_b in anums_list[j]:
                 try:
                     if num_b in sd[num_a]:
-                        surf_tot += self.get_weighted_surf_atomnum(sd, num_a, num_b, resi_a, resi_b, anums_dict)
+                        surf_tot += self._get_weighted_surf_atomnum(sd, num_a, num_b, resi_a, resi_b, anums_dict)
                     if num_a in sd[num_b]:
-                        surf_tot += self.get_weighted_surf_atomnum(sd, num_b, num_a, resi_b, resi_a, anums_dict)
+                        surf_tot += self._get_weighted_surf_atomnum(sd, num_b, num_a, resi_b, resi_a, anums_dict)
                 except:
                     print("Error in surface computation, residues {0} and {1}, file {2}".format(resi_a, resi_b,
                                                                                                 self.mol.pdb_file))
                     raise
         return surf_tot
 
-    def test_list_dict(self, alist, adict):
-        for l in alist:
-            s = ""
-            for i in l:
-                a = adict[i]
-                s += "{0}|{1}|{2} ".format(a.name, a.resiname, a.resinum)
-            print(s)
-
-    def compute_Bij(self, masses, resis):
+    def _compute_Bij(self, masses, resis):
         """ Computes the Bij term in the ENCoM potential, which is the
             modulating factor of the long-range interaction (V4) term calculated
             according to atomic surface complementarity.
@@ -379,8 +440,8 @@ class ENCoM(ENM):
         sd = self.mol.get_surface_dict()
         n = len(masses)
         bij = np.zeros((n, n))
-        atomnums_list = self.make_atomnums_list(masses, resis)
-        atomnums_dict = self.make_atomnums_dict(resis)
+        atomnums_list = self._make_atomnums_list(masses, resis)
+        atomnums_dict = self._make_atomnums_dict(resis)
         self._print_verbose(self.atypes_dict)
         for i in range(n):
             ma = masses[i]  # mass_a
@@ -391,7 +452,7 @@ class ENCoM(ENM):
                 kb = mb[4]
                 resiname_b = kb.split('|')[0].split('.')[0]
                 try:
-                    surf_tot = self.get_total_surf_atomnum(sd, atomnums_list, i, j, resiname_a, resiname_b, atomnums_dict)
+                    surf_tot = self._get_total_surf_atomnum(sd, atomnums_list, i, j, resiname_a, resiname_b, atomnums_dict)
                 except:
                     e = sys.exc_info()[0]
                     print("Error in surface computation, file {0}".format(self.mol.pdb_file))
@@ -401,7 +462,7 @@ class ENCoM(ENM):
         self._print_verbose(self.not_there)
         return bij
 
-    def make_atomnums_list(self, masses, resis):
+    def _make_atomnums_list(self, masses, resis):
         """ Makes a list which corresponds in index with the masses received and
             which contains lists of atom numbers for every mass.
         """
@@ -416,7 +477,7 @@ class ENCoM(ENM):
             atomnums_list.append(anums)
         return atomnums_list
 
-    def make_atomnums_dict(self, resis):
+    def _make_atomnums_dict(self, resis):
         """ Makes a dictionary associating each atom number to an Atom object.
         """
         numdict = dict()
@@ -425,157 +486,11 @@ class ENCoM(ENM):
                 numdict[resis[r][a].num] = resis[r][a]
         return numdict
 
-    def get_weighted_surf(self, d_ab, resi_a, resi_b):
-
-        surf = 0
-        for k in d_ab:
-            atom1, atom2 = k.split('|')
-            try:
-                i = self.atypes_dict[resi_a][atom1]
-            except KeyError:
-                self.not_there.add((resi_a, atom1))
-                continue
-            try:
-                j = self.atypes_dict[resi_b][atom2]
-            except KeyError:
-                self.not_there.add((resi_b, atom2))
-                continue
-            surf += d_ab[k] * self.inter_mat[i][j]
-        return surf
-
-    def is_long_range(self, i, j):
+    def _is_long_range(self, i, j):
         if i == j:
             return False
         return self.mol.is_disconnected(i, j)
 
-    def sort_eigvecs_vals(self, vals, vecs):
-        tosort = zip(vals, vecs)
-        tosort = sorted(tosort)
-        vals = [x[0] for x in tosort]
-        vecs = [x[1] for x in tosort]
-        return (vals, vecs)
 
-    def str_hessian(self, h, x=None, y=None):
-        s = ""
-        if x is None:
-            x = int(len(h) / 3)
-        if y is None:
-            y = int(len(h) / 3)
-        for i in range(3 * x):
-            for j in range(3 * y):
-                # s += "{:>8.1f} ".format(h[i][j])
-                s += "{:>9.2E} ".format(h[i][j])
-            s += "\n"
-        return s
-
-    def str_sqr_matrix(self, m):
-        s = ""
-        n = len(m)
-        for i in range(n):
-            for j in range(n):
-                s += "{:>8.3f} ".format(m[i][j])
-            s += "\n"
-        return s
-
-    def filter_bij(self):
-        n = len(self.bij)
-        fbij = np.zeros((n, n))
-        for i in range(n):
-            for j in range(i, n):
-                if self.is_long_range(i, j):
-                    fbij[i][j] = self.bij[i][j]
-                fbij[j][i] = fbij[i][j]
-        return fbij
-
-    def emulate_template(self):
-        fbij = self.filter_bij()
-        n = len(fbij)
-        for i in range(n):
-            for j in range(n):
-                fbij[i][j] += 0.001
-        return fbij
-
-    def print_hessian(self, h):
-        s = self.str_hessian(h)
-        print(s)
-
-    def write_hessians(self, prefix):
-        for tup in zip([self.V1_H, self.V2_H, self.V3_H, self.V4_H, self.V_tot], ["1", "2", "3", "4", "tot"]):
-            with open("{0}_V_{1}.hess".format(prefix, tup[1]), "w") as f:
-                f.write(self.str_hessian(tup[0]))
-
-    def write_bij(self, prefix):
-        print(self.bij)
-        with open("{0}_Bij.mat".format(prefix), "w") as f:
-            f.write(self.str_sqr_matrix(self.emulate_template()))
-
-    def write_vecs_df(self, n_vecs, outfile):
-        with open(outfile, 'w') as f:
-            for i in range(self.n):
-                for k in range(3):
-                    f.write("{} ".format(i))
-                    for v in range(6, 6 + n_vecs):
-                        f.write("{:>10.5f} ".format(self.eigvecs[3 * i + k][v]))
-                    f.write("\n")
-
-def distance(a, b):
+def _distance(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
-
-
-if __name__ == "__main__":
-    # if len(sys.argv) != 2:
-    #     raise ValueError("I need 1 arg : pdb (protein) file")
-    # pdb_file = sys.argv[1]
-
-    # test2 = ENCoM("closed_clean.pdb")
-    test = ENCoM("test_medium.pdb")
-
-    bfacts = test.compute_bfactors()
-    entro = test.compute_vib_entropy()
-    test.write_dynamical_signature("test.df")
-    print(entro)
-    x = test.eigvals[6:16]
-    print(test.eigvals[6:16])
-    test.build_conf_ensemble([7, 8], "test_conf.pdb")
-
-
-
-
-
-
-# print(bfacts)
-# print(entro)
-# test.write_hessians(pdb_file[:-4])
-# print(compare_bfacts(bfacts, pdb_file[:-4] + ".cov"))
-# print(bfacts)
-# print(test.compute_vib_entropy())
-# print(vals[6:50])
-# print(len(vals))
-
-# mat1, vals1 = parse_mat("hessian.dat")
-# vals1, vecs1 = np.linalg.eigh(mat1)
-# tmp = []
-# for i, vec1 in enumerate(vecs1):
-# 	tmp.append(vecs1[:, i])
-# vecs1 = tmp
-# test.eigvecs = vecs1
-# test.eigvals = vals1
-
-# print(compare_versions(vals, vecs, pdb_file[:-4] + ".dat"))
-# print(compare_versions(vals1, vecs1, pdb_file[:-4] + ".dat"))
-# print(vecs[6][:100])
-
-# test.write_vecs_df(10, "test_vecs.df")
-# d = dict()
-# for t in test.not_there:
-# 	if not t[0] in d:
-# 		d[t[0]] = []
-# 	d[t[0]].append(t[1])
-# print(d)
-
-# test.print_hessian(test.V_tot)
-
-# vals, vecs = test.solve()
-# print(vals)
-# test.write_vecs_df(20, "eigvecs2.df")
-# print(vecs)

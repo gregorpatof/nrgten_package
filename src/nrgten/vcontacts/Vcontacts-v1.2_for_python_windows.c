@@ -101,8 +101,8 @@ long int *seed;                  // seed vertices for new polyhedra
 // --------------------- function prototypes ----------------------
 
 
-int run_from_python(char filedata[], int atom_nums[], char atom_names[], int resi_nums[], char resi_names[],
-                    char chains[], float areas[], float dists[]); // added by Olivier
+    __declspec(dllexport) int run_from_python(char filedata[], int atom_nums[], char atom_names[], int resi_nums[], char resi_names[],
+                        char chains[], float areas[], float dists[]); // added by Olivier
 
 int mock_main(char filedata[]); // added by Olivier
 struct atom *mock_read_PDB(char filedata[], struct atom *PDB, long int *numPDBatoms);

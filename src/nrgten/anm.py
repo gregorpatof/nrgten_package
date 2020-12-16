@@ -5,11 +5,43 @@ import pickle
 
 
 class ANM(ENM):
-    """ Anisotropic Network Model. Has 3 parameters: cutoff, power dependence and spring constant. Spring constant just
-        rescales fluctuations but doesn't change their relative values. Cutoff can be infinity (fully connected model).
+    """Class implementing the ANM (Anisotropic Network Model).
+
+    Has 3 parameters: cutoff, power dependence and spring constant. Spring constant just rescales fluctuations but
+    doesn't change their relative values. Cutoff can be infinity (fully connected model). The original ANM paper is:
+    https://doi.org/﻿10.1016/S0006-3495(01)76033-X and the paper on varying the power dependence is:
+    https://doi.org/﻿10.1073/pnas.0902159106
+
+    Note:
+        ANM extends the `ENM` class, to see inherited attributes look at the documentation for `ENM`.
+
+    Attributes:
+        cut (float): the distance cutoff for interaction between 2 masses.
+        pd (float): the power dependence of the interaction.
+        kr (float): the interaction constant (does not change the solution but scales the values).
     """
     def __init__(self, pdb_file, cut=float('inf'), power_dependence=0, kr=1, solve=True, use_pickle=False,
                  ignore_hetatms=False, atypes_list=None, massdef_list=None, solve_mol=True, one_mass=False):
+        """Constructor for the ANM class.
+
+        Args:
+            pdb_file (str): The PDB file from which to build the model.
+            cut (float, optional): The interaction cutoff.
+            power_dependence (float, optional): The power dependence. For consistency with published papers, a power
+                                                dependence of 0 means that the distance will be squared in the Hessian.
+            solve (bool, optional): If True, the Hessian matrix will be built and solved.
+            use_pickle (bool, optional): If True, the ENM object will be solved only once and subsequently built from
+                                         its pickled representation. Uses a lot of disk space for large systems.
+            ignore_hetatms (bool, optional): Flag to ignore HETATM records in the PDB file.
+            atypes_list (list, optional): If supplied, the default .atypes configuration files are ignored and these
+                                          are the only ones read.
+            massdef_list (list, optional): If supplied, the default .masses configuration files are ignored and these
+                                           are the only ones read.
+            solve_mol (bool, optional): If True, the underlying Macromol object will be solved, i.e. the connectivity
+                                        of the residues will be inferred.
+            one_mass (bool, optional): If True, nucleic acids will be built using only one mass per nucleotide instead
+                                       of 3.
+        """
         self.cut = cut
         self.pd = power_dependence
         self.kr = kr
@@ -17,6 +49,11 @@ class ANM(ENM):
                          atypes_list=atypes_list, massdef_list=massdef_list, solve_mol=solve_mol, one_mass=one_mass)
 
     def build_hessian(self):
+        """Builds the Hessian matrix.
+
+        Returns:
+            The Hessian matrix.
+        """
         if not self.mol.solved:
             self.mol.solve()
         masscoords = self.mol.masscoords
@@ -49,7 +86,7 @@ class ANM(ENM):
                 hessian[j][i] = hessian[i][j]
         return hessian
 
-    def get_pickle_file(self):
+    def _get_pickle_file(self):
         param_string = "{0}_{1}_{2}".format(self.cut, self.pd, self.kr)
         if self.one_mass:
             return '.'.join(self.pdb_file.split('.')[:-1]) + ".ANM_{0}_1n.pickle".format(param_string)
@@ -57,7 +94,12 @@ class ANM(ENM):
             return '.'.join(self.pdb_file.split('.')[:-1]) + ".ANM_{0}.pickle".format(param_string)
 
     def build_from_pickle(self):
-        pickle_file = self.get_pickle_file()
+        """Builds an ANM object from its pickled state.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        pickle_file = self._get_pickle_file()
         if not os.path.isfile(pickle_file):
             return False
         try:
@@ -76,8 +118,10 @@ class ANM(ENM):
         return True
 
     def pickle(self):
+        """Builds a pickled state from the ANM object.
+        """
         super()._clear_info()
-        pickle_file = self.get_pickle_file()
+        pickle_file = self._get_pickle_file()
         with open(pickle_file, 'wb') as f:
             pickle.dump(self, f)
 

@@ -16,12 +16,13 @@ def get_transit_probs(enm_a, enm_b, gamma=1, alignment=None):
         enm_b (ENM): The ENM object representing state B.
         gamma (float, optional): The Boltzmann scaling factor.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY-Z and enm_b: ZXYYXZ would give alignment=[[0,1,2,3],[1,2,3,5]]
 
     Returns:
         tuple: tuple containing:
-            p_a(float) the probability of reaching state A from state B
-            p_b(float) the probability of reaching state B from state A
+            p_a(float): the probability of reaching state A from state B
+
+            p_b(float): the probability of reaching state B from state A
     """
     vals_a = enm_a.eigvals[6:]
     vals_b = enm_b.eigvals[6:]
@@ -64,7 +65,7 @@ def fit(reference, target, alignment=None, filter=None):
         reference (ENM): The reference ENM object to which the target will be fitted.
         target (ENM): The target ENM object which will be fitted to the reference.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY-Z and enm_b: ZXYYXZ would give alignment=[[0,1,2,3],[1,2,3,5]]
         filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
 
     Returns:
@@ -107,7 +108,7 @@ def get_amplitudes_for_fit(reference, target, n_modes, alignment=None, filter=No
         target (ENM): The target ENM object which will be fitted to the reference.
         n_modes (int): The number of normal modes for which coefficients will be returned.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY-Z and enm_b: ZXYYXZ would give alignment=[[0,1,2,3],[1,2,3,5]]
         filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
 
     Returns:
@@ -128,14 +129,14 @@ def cumulative_overlap(reference, target, n_modes, alignment=None, filter=None):
     """Cumulative overlap, as defined in Zimmerman and Jernigan 2014, Eq. 4.
 
     This computes the cumulative overlap between the `n_modes` first normal modes of the reference and the
-    conformational change going from reference to target. See Eq. 4 from https://doi.org/﻿10.1261/rna.041269.113
+    conformational change going from reference to target. See Eq. 4 from `https://doi.org/﻿10.1261/rna.041269.113`
 
     Args:
         reference (ENM): The reference ENM object to which the target will be fitted.
         target (ENM): The target ENM object which will be fitted to the reference.
         n_modes (int): The number of normal modes for which the cumulative overlap will be returned.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY-Z and enm_b: ZXYYXZ would give alignment=[[0,1,2,3],[1,2,3,5]]
         filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
 
     Returns:
@@ -158,7 +159,7 @@ def get_overlaps(reference, target, n_modes, alignment=None, filter=None):
         target (ENM): The target ENM object which will be fitted to the reference.
         n_modes (int): The number of normal modes for which the overlaps will be returned.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY-Z and enm_b: ZXYYXZ would give alignment=[[0,1,2,3],[1,2,3,5]]
         filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
 
     Returns:

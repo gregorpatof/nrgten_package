@@ -9,13 +9,14 @@ from nrgten.enm import ENM
 class ENCoM(ENM):
     """Class implementing the latest version of ENCoM (Elastic Network Contact Model).
 
-        It extends the `ENM` class, implementing its own build_hessian(), pickle() and build_from_pickle() methods. See
+        It extends the ENM class, implementing its own build_hessian(), pickle() and build_from_pickle() methods. See
         ENM class for the attributes it inherits. For details about the ENCoM model, see the 2014 Frappier and
         Najmanovich paper: www.doi.org/10.1371/journal.pcbi.1003569
 
         Note:
             This class also implements the STeM model (Generalized Spring Tensor Model, on which ENCoM is based). The
-            original STeM paper can be found here: https://doi.org/﻿10.1186/1472-6807-10-S1-S3
+            original STeM paper can be found here:
+            `https://doi.org/10.1186/1472-6807-10-S1-S3 <https://doi.org/10.1186/1472-6807-10-S1-S3>`_
 
         Attributes:
             dirpath (str): The absolute path to the directory containing the encom.py module.

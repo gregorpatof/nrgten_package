@@ -2,7 +2,7 @@ import unittest
 import os
 
 from nrgten.encom import ENCoM
-from nrgten.metrics import overlap
+from nrgten.metrics import get_overlaps
 
 class MainTest(unittest.TestCase):
 
@@ -47,8 +47,8 @@ class MainTest(unittest.TestCase):
 
 
         # computed overlaps
-        o_to_c = overlap(self.cs_open, self.cs_closed, 10)
-        c_to_o = overlap(self.cs_closed, self.cs_open, 10)
+        o_to_c = get_overlaps(self.cs_open, self.cs_closed, 10)
+        c_to_o = get_overlaps(self.cs_closed, self.cs_open, 10)
 
         for expected, observed in zip([o_to_c_expected, c_to_o_expected], [o_to_c, c_to_o]):
             for i in range(10):

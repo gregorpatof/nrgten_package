@@ -623,7 +623,11 @@ class ENM(metaclass=abc.ABCMeta):
         """
         basis = []
         for v in vectors:
-            w = v - np.sum( np.dot(v,b)*b  for b in basis )
+            x = np.zeros((len(v)))
+            for b in basis:
+                x += np.dot(v, b)*b
+            w = v - x
+            # w = v - np.sum(np.dot(v,b)*b  for b in basis) # Calling np.sum(generator) is deprecated
             if (w > 1e-10).any():
                 basis.append(w/np.linalg.norm(w))
             if len(basis) == target_n:

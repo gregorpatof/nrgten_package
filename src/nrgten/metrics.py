@@ -16,7 +16,7 @@ def get_transit_probs(enm_a, enm_b, gamma=1, alignment=None):
         enm_b (ENM): The ENM object representing state B.
         gamma (float, optional): The Boltzmann scaling factor.
         alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
-                                    enm_a: -XYY--Z and enm_i: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
 
     Returns:
         tuple: tuple containing:
@@ -35,36 +35,45 @@ def get_transit_probs(enm_a, enm_b, gamma=1, alignment=None):
     pjs_a /= np.sum(pjs_a)
     pjs_b /= np.sum(pjs_b)
     if alignment is None:
-        overlaps_a = overlap(enm_b, enm_a, len(vals_a))
-        overlaps_b = overlap(enm_a, enm_b, len(vals_a))
+        overlaps_a = get_overlaps(enm_b, enm_a, len(vals_a))
+        overlaps_b = get_overlaps(enm_a, enm_b, len(vals_a))
     else:
-        overlaps_a = overlap_alignment(enm_b, enm_a, len(alignment[0]) * 3 - 6, [alignment[1], alignment[0]])
-        overlaps_b = overlap_alignment(enm_a, enm_b, len(alignment[0]) * 3 - 6, alignment)
+        overlaps_a = get_overlaps(enm_b, enm_a, len(alignment[0]) * 3 - 6, [alignment[1], alignment[0]])
+        overlaps_b = get_overlaps(enm_a, enm_b, len(alignment[0]) * 3 - 6, alignment)
     n = len(overlaps_a)
     p_a = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_a, pjs_a[:n])]))
     p_b = np.sum(np.array([x[0] * x[1] for x in zip(overlaps_b, pjs_b[:n])]))
     return p_a, p_b
 
 
-def fit(reference, target, filter=None):
-    """ Fits the target to the reference with optimal rotation and translation. Returns the vector of remaining
-        conformational change.
-    """
-    ref_xyz = reference.get_filtered_xyz(filter)
-    rmsd, r, transvec = rmsd_kabsch(ref_xyz, target.get_filtered_xyz(filter))
-    target._rotate(r)
-    target._translate_xyz(transvec)
-    targ_xyz = target.get_filtered_xyz(filter)
-    conf_change = np.array(listify(np.subtract(targ_xyz, ref_xyz)))
-    target._translate_xyz(-transvec)
-    target._rotate(np.transpose(r))
-    return conf_change
+def fit(reference, target, alignment=None, filter=None):
+    """Fits the target to the reference.
 
+    Only the masses that have centers in the filter set are kept (all are kept if filter is None). An alignment can also
+    be applied to select corresponding masses. It is applied after filtering.
 
-def fit_alignment(reference, target, alignment, filter):
-    """ Fits the target to the reference, by first keeping the masses that have centers in the filter set, and then
-        applying the alignment, which is 2 lists of corresponding indices [ref, target].
+    Note:
+        Only the conformational change vector is returned, and the target ENM object is left untouched. This vector
+        does not include the 6 trivial 3-D degrees of freedom (rotational and translational).
+
+    Warning:
+        The target object is manipulated during this operation. Could lead to nasty effects if used naively during
+        parallel computing.
+
+    Args:
+        reference (ENM): The reference ENM object to which the target will be fitted.
+        target (ENM): The target ENM object which will be fitted to the reference.
+        alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
+                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+        filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
+
+    Returns:
+        np.ndarray: a vector representing the conformational change from reference to target
     """
+    if alignment is None:
+        assert reference.get_n_masses() == target.get_n_masses()
+        n = reference.get_n_masses()
+        alignment = [[x for x in range(n)], [x for x in range(n)]]
     assert len(alignment) == 2 and len(alignment[0]) == len(alignment[1])
 
     ref_xyz_before = reference.get_filtered_xyz(filter) # before applying alignment
@@ -76,8 +85,8 @@ def fit_alignment(reference, target, alignment, filter):
         ref_xyz[i] = ref_xyz_before[alignment[0][i]]
         targ_xyz[i] = targ_xyz_before[alignment[1][i]]
     rmsd, r, transvec = rmsd_kabsch(ref_xyz, targ_xyz)
-    target.rotate(r)
-    target.translate_xyz(transvec)
+    target._rotate(r)
+    target._translate_xyz(transvec)
 
     # new target xyz after translation and rotation
     targ_xyz_before = target.get_filtered_xyz(filter)
@@ -85,9 +94,91 @@ def fit_alignment(reference, target, alignment, filter):
     for i in range(n):
         targ_xyz[i] = targ_xyz_before[alignment[1][i]]
     conf_change = np.array(listify(np.subtract(targ_xyz, ref_xyz)))
-    target.translate_xyz(-transvec)
-    target.rotate(np.transpose(r))
+    target._translate_xyz(-transvec)
+    target._rotate(np.transpose(r))
     return conf_change
+
+
+def get_amplitudes_for_fit(reference, target, n_modes, alignment=None, filter=None):
+    """This gives the amplitudes to apply to each eigenvector of the target to get as close as possible to the target.
+
+    Args:
+        reference (ENM): The reference ENM object to which the target will be fitted.
+        target (ENM): The target ENM object which will be fitted to the reference.
+        n_modes (int): The number of normal modes for which coefficients will be returned.
+        alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
+                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+        filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
+
+    Returns:
+        np.ndarray: a vector of amplitudes of length `n_modes`
+    """
+    if alignment is None:
+        assert reference.get_n_masses() == target.get_n_masses()
+        n = reference.get_n_masses()
+        alignment = [[x for x in range(n)], [x for x in range(n)]]
+    conf_change = fit(reference, target, alignment, filter)
+    eigvecs = reference.get_filtered_eigvecs_mat(alignment[0], filter)
+    u, s, v = np.linalg.svd(eigvecs)
+    x = np.dot(np.dot(np.transpose(v), np.diag(s)), np.dot(np.transpose(u), conf_change))
+    return x[6:n_modes+6]
+
+
+def cumulative_overlap(reference, target, n_modes, alignment=None, filter=None):
+    """Cumulative overlap, as defined in Zimmerman and Jernigan 2014, Eq. 4.
+
+    This computes the cumulative overlap between the `n_modes` first normal modes of the reference and the
+    conformational change going from reference to target. See Eq. 4 from https://doi.org/﻿10.1261/rna.041269.113
+
+    Args:
+        reference (ENM): The reference ENM object to which the target will be fitted.
+        target (ENM): The target ENM object which will be fitted to the reference.
+        n_modes (int): The number of normal modes for which the cumulative overlap will be returned.
+        alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
+                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+        filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
+
+    Returns:
+        float: the cumulative overlap, using the `n_modes` first normal modes
+    """
+    conf_change = fit(reference, target, alignment, filter)
+    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
+    assert len(conf_change) == len(eigvecs[0])
+    return _cumulative_overlap_helper(conf_change, eigvecs[6:6+n_modes])
+
+
+def get_overlaps(reference, target, n_modes, alignment=None, filter=None):
+    """Computes the overlaps between the `n_modes` from target and the conformational change.
+
+    The conformational change is the vector of displacement going from `reference` to `target`, without
+    translational/rotational degrees of freedom.
+
+    Args:
+        reference (ENM): The reference ENM object to which the target will be fitted.
+        target (ENM): The target ENM object which will be fitted to the reference.
+        n_modes (int): The number of normal modes for which the overlaps will be returned.
+        alignment (list, optional): list of 2 lists of matching indices. Example: The alignment of sequences
+                                    enm_a: -XYY--Z and enm_b: ZXYYXXZ would give alignment=[[0,1,2,3],[1,2,3,6]]
+        filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
+
+    Returns:
+        list: The list of overlaps, of length `n_modes`.
+    """
+    if alignment is None:
+        assert reference.get_n_masses() == target.get_n_masses()
+        n = reference.get_n_masses()
+        alignment = [[x for x in range(n)], [x for x in range(n)]]
+    conf_change = fit(reference, target, alignment, filter)
+    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
+    assert len(conf_change) == len(eigvecs[0])
+    overlaps = []
+    n = n_modes + 6
+    if n > len(eigvecs):
+        n = len(eigvecs)
+    for i in range(6, n):
+        vec = np.array(eigvecs[i])
+        overlaps.append(np.abs(np.dot(vec, conf_change))/(np.linalg.norm(vec)*np.linalg.norm(conf_change)))
+    return overlaps
 
 
 def rmsd_alignment(reference, target, alignment, filter):
@@ -105,46 +196,11 @@ def rmsd_alignment(reference, target, alignment, filter):
     return rmsd
 
 
-def fit_svd(reference, target, n_modes):
-    """ This function is an attempt at replicating the fit_svd executable from
-        ENCoM 1. The name could be more informative...
-        Parameters:
-        from_structure: ENCoM object to which the eigenvectors will be applied
-        to_structure: ENCoM object of the target structure
-        n_modes: number of normal modes to consider
-    """
-    conf_change = fit(reference, target)
-    # eigvecs = reference.eigvecs_mat[:,6:n_modes+6]
-    eigvecs = reference.eigvecs_mat
-    x = np.dot(np.linalg.inv(eigvecs), conf_change)
-    return x[6:n_modes+6]
-
-
-def fit_svd_alignment(reference, target, n_modes, alignment, filter=None):
-    """ Same as fit_svd, but with supplied alignment between reference and target structures (in the form of 2 lists of
-        matching indices, applied to the masses after applying the filter, which is a set of center atoms to keep).
-    """
-    conf_change = fit_alignment(reference, target, alignment, filter)
-    eigvecs = reference.get_filtered_eigvecs_mat(alignment[0], filter)
-    u, s, v = np.linalg.svd(eigvecs)
-    x = np.dot(np.dot(np.transpose(v), np.diag(s)), np.dot(np.transpose(u), conf_change))
-    return x[6:n_modes+6]
-
-
-def fit_svd_svd(reference, target, n_modes):
-    conf_change = fit(reference, target)
-    eigvecs = reference.eigvecs_mat
-    u, s, v = np.linalg.svd(eigvecs)
-    x = np.dot(np.dot(np.transpose(v), np.diag(s)), np.dot(np.transpose(u), conf_change))
-    return x[6:n_modes+6]
-
-
-def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None):
+def _pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None):
     """ Principal component analysis on an ensemble of structures. Returns the necessary PCAs to explain the target
         proportion of variance and their respective proportions of variance explained as:
         (explained variances, PCAs) (1 PCA per row).
     """
-    # TODO : find a way to use fittings that are reversed and keep only the conf changes
     if macromols_list is None:
         macromols_list = enm.mols[1:]
     refmol = enm.mol
@@ -153,14 +209,18 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
     else:
         coords = np.zeros((3*refmol.get_filtered_n(filter), len(macromols_list) + 1))
     for i, mol in enumerate([refmol] + macromols_list):
+        transvec, r = None, None
         if i > 0:
             if not mol.solved:
                 mol.solve()
-            fit_to_reference_macromol_DEPRECATED(refmol, mol)
+            rmsd, r, transvec = _fit_to_reference_macromol_DEPRECATED(refmol, mol)
         if filter is None:
             coords[:,i] = mol.get_3n_vector()
         else:
             coords[:, i] = mol.get_filtered_3n_vector(filter)
+        if i > 0:
+            mol.translate_xyz(-transvec)
+            mol.rotate(np.transpose(r))
     # Centering the data
     means = np.zeros((len(coords)))
     for i in range(len(coords)):
@@ -180,10 +240,14 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
             break
     return np.flip(proportion_variance, axis=0)[0:n_significant], np.flip(eigvecs, axis=0)[0:n_significant]
 
+def _fit_to_reference_macromol_DEPRECATED(ref, target):
+    rmsd, r, transvec = rmsd_kabsch(ref.masscoords, target.masscoords)
+    target.rotate(r)
+    target.translate_xyz(transvec)
+    return rmsd, r, transvec
 
-def cumulative_overlap(ref_vector, vectors_list):
-    """ Cumulative overlap, as defined in Zimmerman and Jernigan 2014, Eq. 4.
-    """
+
+def _cumulative_overlap_helper(ref_vector, vectors_list):
     s = 0
     ref_norm = np.linalg.norm(ref_vector)
     for vec in vectors_list:
@@ -191,14 +255,7 @@ def cumulative_overlap(ref_vector, vectors_list):
     return np.sqrt(s)
 
 
-def cumulative_overlap_alignment(reference, target, n_modes, alignment, filter=None):
-    conf_change = fit_alignment(reference, target, alignment, filter)
-    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
-    assert len(conf_change) == len(eigvecs[0])
-    return cumulative_overlap(conf_change, eigvecs[6:6+n_modes])
-
-
-def rmsip(ref_vectors, vectors_list):
+def _rmsip(ref_vectors, vectors_list):
     """ Root mean square inner product, as defined in Leo-Macis et al. 2005.
     """
     s = 0
@@ -208,14 +265,7 @@ def rmsip(ref_vectors, vectors_list):
     return np.sqrt(s/len(ref_vectors))
 
 
-def fit_to_reference_macromol_DEPRECATED(ref, target):
-    rmsd, r, transvec = rmsd_kabsch(ref.masscoords, target.masscoords)
-    target._rotate(r)
-    target._translate_xyz(transvec)
-    return rmsd
-
-
-def write_model(enm, count, fh):
+def _write_model(enm, count, fh):
     """ Writes one model to the given filehandle, with model number count.
     """
     fh.write("MODEL     {:>4}\n".format(count))
@@ -223,64 +273,33 @@ def write_model(enm, count, fh):
     fh.write("ENDMDL\n")
 
 
-def motion(enm, mode_index, stepsize, maxrmsd, filename):
+def _motion(enm, mode_index, stepsize, maxrmsd, filename):
     """ Writes a PDB file displaying the motion of a normal mode, using MODEL records.
         Important note: mode_index starts at 1, which is the first nontrivial motion (7th normal mode).
     """
     mode = np.copy(enm.eigvecs[mode_index+5])
-    modermsd = rmsd_of_3n_vector(mode)
+    modermsd = _rmsd_of_3n_vector(mode)
     mode *= stepsize/modermsd
     nsteps = int(maxrmsd/stepsize)
     count = 1
     offset = 0
     with open(filename, "w") as fh:
-        write_model(enm, count, fh)
+        _write_model(enm, count, fh)
         for i, sign in enumerate([1, -1, 1, -1]):
             mode *= sign
             if i == 3:
                 offset = 1
             for i in range(nsteps - offset):
                 enm._translate_3n_vector(mode)
-                write_model(enm, count, fh)
+                _write_model(enm, count, fh)
                 count += 1
 
 
-def rmsd_of_3n_vector(vec):
+def _rmsd_of_3n_vector(vec):
     dists = np.zeros((int(len(vec)/3)))
     for i in range(0, len(vec), 3):
         dists[int(i/3)] = vec[i]**2 + vec[i+1]**2 + vec[i+2]**2
     return np.sqrt(np.mean(dists))
-
-
-def overlap(reference, target, n_modes):
-    """ Returns a list of overlaps for each normal mode, going from reference to target. reference and target
-        are ENCoM objects, and reference obviously needs to be solved.
-    """
-    conf_change = fit(reference, target)
-    eigvecs = reference.eigvecs
-    assert len(conf_change) == len(eigvecs[0])
-    overlaps = []
-    for i in range(6, n_modes+6):
-        vec = np.array(eigvecs[i])
-        overlaps.append(np.abs(np.dot(vec, conf_change))/(np.linalg.norm(vec)*np.linalg.norm(conf_change)))
-    return overlaps
-
-
-def overlap_alignment(reference, target, n_modes, alignment, filter=None):
-    """ Returns a list of overlaps for each normal mode, going from reference to target. reference and target
-        are ENM objects, and reference obviously needs to be solved.
-    """
-    conf_change = fit_alignment(reference, target, alignment, filter)
-    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
-    assert len(conf_change) == len(eigvecs[0])
-    overlaps = []
-    n = n_modes + 6
-    if n > len(eigvecs):
-        n = len(eigvecs)
-    for i in range(6, n):
-        vec = np.array(eigvecs[i])
-        overlaps.append(np.abs(np.dot(vec, conf_change))/(np.linalg.norm(vec)*np.linalg.norm(conf_change)))
-    return overlaps
 
 
 def listify(matNx3):
@@ -362,167 +381,16 @@ def get_centroid(p):
     return xyz/n
 
 
-def test_citrate_synthase():
-    closed_file = "unit-tests/citrate_synthase/closed_clean.pdb"
-    open_file = "unit-tests/citrate_synthase/open_clean.pdb"
-    closed = ENCoM(closed_file)
-    open = ENCoM(open_file, solve=False)
-    # rmsd, r, transvec = rmsd_kabsch(closed.get_xyz(), open.get_xyz())
-    # print(rmsd, r, transvec)
-    # open.rotate(r)
-    # open.translate_xyz(transvec)
-    # open.write_to_file("unit-tests/citrate_synthase/open_unto_closed.pdb")
-    # print(overlap(closed, open, 10))
-    # closed.write_to_file("unit-tests/citrate_synthase/closed_after_over.pdb")
-    # open.write_to_file("unit-tests/citrate_synthase/open_after_over.pdb")
-    print(fit_svd(closed, open, 10))
-    print(fit_svd_svd(closed, open, 10))
-
-
-def test_nmr(enm, kwlist=None):
-    """ Returns rmsip, nco.
-    """
-    print(enm)
-    insulin_file = "unit-tests/jernigan_renamed_cleaned/JR03.pdb"
-    if kwlist is None:
-        insulin = enm(insulin_file)
-    else:
-        print(kwlist)
-        insulin = enm(insulin_file, **kwlist)
-    vars, pcas = pca_ensemble(insulin)
-    print(rmsip(pcas, insulin.eigvecs[6:16]))
-    var_overlap = np.zeros((len(pcas), 2))
-    for i in range(len(pcas)):
-        var_overlap[i] = vars[i], cumulative_overlap(pcas[i], insulin.eigvecs[6:16])
-    # print(var_overlap)
-    print(np.sum([x[0]*x[1] for x in var_overlap]))
-    # print(vars)
-    # print(pcas)
-
-
-def test_jernigan(filename, enm, kwlist=None):
-    print(enm)
-    if kwlist is None:
-        model = enm(filename)
-    else:
-        print(kwlist)
-        model = enm(filename, **kwlist)
-    vals, vecs = pca_ensemble(model, filter={"P"})
-    return cumulative_overlap(vecs[0], model.get_filtered_eigvecs_mat(filter={"P"}, transpose=False, n_vecs=20, start=6))
-
-
-def test_entropy(factor=1):
-    enc_1caa = ENCoM("unit-tests/delta_s/1caa_trimmed.pdb")
-    ref_ent = enc_1caa.compute_vib_entropy(factor=factor)
-    pdbs = glob.glob("unit-tests/delta_s/*.pdb")
-    old_nussinov = np.zeros((3, 4))
-    for i, pdb in enumerate(pdbs):
-        print(pdb)
-        enc = ENCoM(pdb, ignore_hetatms=True)
-        initial, nussi = enc.compute_vib_entropy(), enc.compute_vib_entropy(factor=factor)
-        print(initial, nussi, nussi/ref_ent)
-        old_nussinov[0][i] = enc.compute_vib_entropy()
-        old_nussinov[1][i] = enc.compute_vib_entropy(factor=factor)
-        old_nussinov[2][i] = enc.get_n_masses()
-    return old_nussinov
-
-
-def test_entropy_bfacts(factor=1):
-    basedir = "unit-tests/filtered_bfact_pdbs"
-    with open("/Users/Paracelsus/school/PhD/h20/projet/delta_s/old_vs_nussinov.txt") as f:
-        lines = f.readlines()
-    codes = []
-    for line in lines:
-        codes.append(line.split()[0])
-    old_nussinov = np.zeros((4, 20))
-    for i, code in enumerate(codes):
-        if i > 19:
-            break
-        enc = ENCoM("{0}/{1}.pdb".format(basedir, code), ignore_hetatms=True, use_pickle=True)
-        old_nussinov[0][i] = enc.compute_vib_entropy()
-        old_nussinov[1][i] = enc.compute_vib_entropy(factor=factor)
-        old_nussinov[2][i] = enc.compute_vib_enthalpy()
-        old_nussinov[3][i] = enc.get_n_masses()
-    return old_nussinov
-
-
-def run_mir125a(filename):
-    if os.path.isfile(filename[:-4] + ".sig"):
-        return
-    enc = ENCoM(filename)
-    enc.compute_bfactors()
-    enc.write_dynamical_signature(filename[:-4] + ".sig")
-
-
-def test_overlap_alignment():
-    closed_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/closed_clean.pdb"
-    open_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/open_clean.pdb"
-    closed = ENCoM(closed_fn, use_pickle=True)
-    open = ENCoM(open_fn, use_pickle=True)
-    coeffs = fit_svd(open, closed, 10)
-    overlaps = overlap(open, closed, 10)
-    # print(open.get_n_masses())
-    print(coeffs)
-    print(overlaps)
-    print(overlaps / coeffs)
-    alignment = [x for x in range(1, 437, 2)]
-    alignment = [alignment, alignment]
-    coeffs_align = fit_svd_alignment(open, closed, 10, alignment)
-    overlaps_align = overlap_alignment(open, closed, 10, alignment)
-    print(coeffs_align)
-    print(overlaps_align)
-    print(overlaps_align / coeffs_align)
-    all_resis = [x for x in range(437)]
-    all_resis = [all_resis, all_resis]
-    # print(cumulative_overlap_alignment(closed, open, 3*437-6, all_resis))
-    # print(cumulative_overlap_alignment(closed, open, 3*437-6, alignment))
-    print(overlap_alignment(closed, open, 3*437-6, alignment))
-
-    overlaps = overlap_alignment(closed, open, 4, alignment)
-    print(np.linalg.norm(np.array(overlaps)))
-
-def test_pa_pi(use_pickle=True):
-    closed_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/closed_clean.pdb"
-    open_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/open_clean.pdb"
-    open_trunc_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/open_clean_truncated.pdb"
-    closed = ENCoM(closed_fn, use_pickle=use_pickle)
-    open = ENCoM(open_fn, use_pickle=use_pickle)
-    open_trunc = ENCoM(open_trunc_fn, use_pickle=use_pickle)
-    align = [x for x in range(430)]
-    alignment = [align, align]
-
-    print(get_pa_pi(closed, open_trunc, alignment=alignment))
-    print(get_pa_pi(open_trunc, closed, alignment=alignment))
-
-    print(get_pa_pi(closed, open))
-    print(get_pa_pi(open, closed))
-
-def test_pa_pi_2(use_pickle=True):
-    closed_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/closed_clean.pdb"
-    open_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/open_clean.pdb"
-    open_trunc_fn = "/Users/Paracelsus/school/PhD/a20/projet/citrate_synthase/open_clean_truncated.pdb"
-    closed = ENCoM(closed_fn, use_pickle=use_pickle)
-    open = ENCoM(open_fn, use_pickle=use_pickle)
-    open_trunc = ENCoM(open_trunc_fn, use_pickle=use_pickle)
-    align = [x for x in range(430)]
-    alignment = [align, align]
-
-    print(get_pa_pi(open_trunc, closed, alignment=alignment))
-    print(get_pa_pi(closed, open_trunc, alignment=alignment))
-
-    print(get_pa_pi(open, closed))
-    print(get_pa_pi(closed, open))
-
-
-
 
 
 if __name__ == "__main__":
     # test_boltzmann_squares()
 
+
     open = ENCoM("../../tests/open_clean.pdb")
     closed = ENCoM("../../tests/closed_clean.pdb")
-    print(overlap(open, closed, 10))
-    print(overlap(closed, open, 10))
+    print(get_amplitudes_for_fit(open, closed, 10))
+    # print(overlap(open, closed, 10))
+    # print(overlap(closed, open, 10))
     # print(open.compute_bfactors()[:15])
 

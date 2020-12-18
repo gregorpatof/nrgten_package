@@ -1,5 +1,5 @@
 from nrgten.encom import ENCoM
-from nrgten.metrics import overlap
+from nrgten.metrics import get_overlaps
 
 if __name__ == "__main__":
     open = ENCoM("open_clean.pdb")

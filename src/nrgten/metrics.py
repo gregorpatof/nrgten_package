@@ -1,11 +1,11 @@
 from nrgten.encom import ENCoM
 from nrgten.anm import ANM
 import numpy as np
-import sys
-import glob
-import os
-from scipy.stats import pearsonr
-from multiprocessing import Pool, current_process
+# import sys
+# import glob
+# import os
+# from scipy.stats import pearsonr
+# from multiprocessing import Pool, current_process
 
 
 def get_transit_probs(enm_a, enm_b, gamma=1, alignment=None):

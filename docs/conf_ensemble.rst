@@ -8,11 +8,13 @@ an ENCoM object::
 	from nrgten.encom import ENCoM
 
 	model = ENCoM("test_medium.pdb")
-	model.build_conf_ensemble([1,2,3], "conf_ensemble.pdb")
+	model.build_conf_ensemble([7,8,9], "conf_ensemble.pdb")
 
 The first argument is the list of normal modes to use to generate the ensemble.
 In the example above, the first 3 modes are used. Note that 1 corresponds to
-the first non-trivial normal mode (which is actually the 7th normal mode).
+the first normal mode, but the first 6 normal modes are trivial
+rotational/translational motions. Thus, index 7 is the first non-trivial
+normal mode.
 
 The second argument is simply the name of the output for the conformational
 ensemble. The ensemble is outputted using the same convention as ensembles of

@@ -7,8 +7,8 @@ with open(os.path.join(HERE, "README.md")) as f:
     README = f.read()
 
 setuptools.setup(
-    name="nrgten", # Replace with your own username
-    version="0.1.1",
+    name="nrgten",
+    version="0.1.2",
     author="Olivier Mailhot",
     description="Najmanovich Research Group Toolkit for Elastic Networks",
     long_description=README,

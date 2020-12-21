@@ -9,8 +9,8 @@ class ANM(ENM):
 
     Has 3 parameters: cutoff, power dependence and spring constant. Spring constant just rescales fluctuations but
     doesn't change their relative values. Cutoff can be infinity (fully connected model). The original ANM paper is:
-    https://doi.org/﻿10.1016/S0006-3495(01)76033-X and the paper on varying the power dependence is:
-    https://doi.org/﻿10.1073/pnas.0902159106
+    `doi.org/10.1016/S0006-3495(01)76033-X <https://doi.org/10.1016/S0006-3495(01)76033-X>`_ and the paper on varying
+    the power dependence is: `doi.org/10.1073/pnas.0902159106 <https://doi.org/10.1073/pnas.0902159106>`_
 
     Note:
         ANM extends the `ENM` class, to see inherited attributes look at the documentation for `ENM`.

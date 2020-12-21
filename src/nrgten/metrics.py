@@ -129,7 +129,8 @@ def cumulative_overlap(reference, target, n_modes, alignment=None, filter=None):
     """Cumulative overlap, as defined in Zimmerman and Jernigan 2014, Eq. 4.
 
     This computes the cumulative overlap between the `n_modes` first normal modes of the reference and the
-    conformational change going from reference to target. See Eq. 4 from `https://doi.org/﻿10.1261/rna.041269.113`
+    conformational change going from reference to target. See Eq. 4 from
+    `doi.org/10.1261/rna.041269.113 <https://doi.org/10.1261/rna.041269.113>`_
 
     Args:
         reference (ENM): The reference ENM object to which the target will be fitted.

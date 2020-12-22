@@ -29,5 +29,28 @@ in this guide will work on your machine.
 Windows users
 -------------
 
-Detailed instructions to follow. For now just adapt above instructions (using
-py instead of python).
+To install NRGTEN on Windows, some additional steps have to be taken. First, you
+will need to install the `Build Tools for Visual Studio 2019 <https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019>`_.
+
+After the installation, search for an executable named **VS2015 x64 Native Tools
+Command Prompt** and start it. Navigate to a desired folder and type::
+
+	pip install nrgten
+
+inside the terminal. Contrary to the macOS and Linux instructions, it is
+necessary to clone the nrgten_examples repository::
+
+	git clone https://github.com/gregorpatof/nrgten_examples
+
+And then run the following example::
+
+	cd nrgten_examples
+	python simple_test.py
+
+As above, you will see this message which confirms proper installation of NRGTEN::
+
+	NRGTEN is properly installed on your system!
+
+At this point, you can run NRGTEN from anywhere, including the standard **cmd**
+executable. The **VS2015 x64 Native Tools Command Prompt** is only necessary
+for the first run after installation (which compiles a C library).

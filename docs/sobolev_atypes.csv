@@ -1,0 +1,9 @@
+﻿LIGIN class,Hydrophilic,Acceptor,Donor,Hydrophobic,Aromatic,Neutral,Neutral-donor,Neutral-acceptor
+1. Hydrophilic,1,1,1,0,1,1,1,1
+2. Acceptor,1,0,1,0,1,1,1,0
+3. Donor,1,1,0,0,1,1,0,1
+4. Hydrophobic,0,0,0,1,1,1,1,1
+5. Aromatic,1,1,1,1,1,1,1,1
+6. Neutral,1,1,1,1,1,1,1,1
+7. Neutral-donor,1,1,0,1,1,1,0,1
+8. Neutral-acceptor,1,0,1,1,1,1,1,0

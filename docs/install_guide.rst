@@ -26,6 +26,11 @@ And you should see this appear in your terminal::
 Congratulations, you have now installed the NRGTEN package. Everything described
 in this guide will work on your machine.
 
+.. note::
+	
+	NRGTEN requires Python version 3.6 or greater to work. If your default Python installation is Python 2.x, you will need
+	to use **pip3** instead of **pip** and **python3** instead of **python**.
+
 Windows users
 -------------
 

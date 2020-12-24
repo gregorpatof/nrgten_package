@@ -143,6 +143,10 @@ def cumulative_overlap(reference, target, n_modes, alignment=None, filter=None):
     Returns:
         float: the cumulative overlap, using the `n_modes` first normal modes
     """
+    if alignment is None:
+        assert reference.get_n_masses() == target.get_n_masses()
+        n = reference.get_n_masses()
+        alignment = [[x for x in range(n)], [x for x in range(n)]]
     conf_change = fit(reference, target, alignment, filter)
     eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
     assert len(conf_change) == len(eigvecs[0])
@@ -198,10 +202,27 @@ def rmsd_alignment(reference, target, alignment, filter):
     return rmsd
 
 
-def _pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None):
-    """ Principal component analysis on an ensemble of structures. Returns the necessary PCAs to explain the target
-        proportion of variance and their respective proportions of variance explained as:
-        (explained variances, PCAs) (1 PCA per row).
+def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None):
+    """Principal component analysis on an ensemble of structures.
+
+    Args:
+        enm (ENM): An ENM object from which the starting structure will be taken. If the macromols_list optional
+                   argument is None, this object must also contain at least one other state of the macromolecule (the
+                   PDB file must be in NMR format with MODEL and ENDMDL records).
+        macromols_list (list, optional): A list of Macromol objects which will be used to compute the PCs.
+        variance_to_explain (float, optional): The target proportion of variance explained by the PCs.
+        filter (set, optional): set containing the names (str) of the center atoms for the masses to keep.
+
+    Warning:
+        The structures other than the starting structures are restored to their initial states at the end but are
+        temporarily disturbed during the computation. This could lead to nasty effects if parallel computing is
+        attempted without care.
+
+    Returns:
+        tuple: tuple containing:
+            proportion_variance(numpy.ndarray): the proportion of variance explained by each PC
+
+            components(numpy.ndarray): the PCs in matrix notation, 1 PC per row
     """
     if macromols_list is None:
         macromols_list = enm.mols[1:]
@@ -242,6 +263,24 @@ def _pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=Non
             break
     return np.flip(proportion_variance, axis=0)[0:n_significant], np.flip(eigvecs, axis=0)[0:n_significant]
 
+def rmsip(ref_vectors, vectors_list):
+    """Root mean square inner product, as defined in Leo-Macias et al. 2005.
+
+    Link to the paper: `doi.org/10.1529/biophysj.104.052449 <https://doi.org/10.1529/biophysj.104.052449>`_
+
+    Args:
+        ref_vectors (np.ndarray): the reference vectors (PCs), in matrix form with one vector per row.
+        vectors_list (np.ndarray): the vectors to test (eigenvectors describing normal modes) in matrix form with one
+                                   vector per row.
+    Returns:
+        float: The root mean square inner product (RMSIP).
+    """
+    s = 0
+    for r in ref_vectors:
+        for v in vectors_list:
+            s += np.square(np.dot(r, v))
+    return np.sqrt(s/len(ref_vectors))
+
 def _fit_to_reference_macromol_DEPRECATED(ref, target):
     rmsd, r, transvec = rmsd_kabsch(ref.masscoords, target.masscoords)
     target.rotate(r)
@@ -256,15 +295,6 @@ def _cumulative_overlap_helper(ref_vector, vectors_list):
         s += np.square(np.absolute(np.dot(ref_vector, vec))/(np.linalg.norm(vec)*ref_norm))
     return np.sqrt(s)
 
-
-def _rmsip(ref_vectors, vectors_list):
-    """ Root mean square inner product, as defined in Leo-Macis et al. 2005.
-    """
-    s = 0
-    for r in ref_vectors:
-        for v in vectors_list:
-            s += np.square(np.dot(r, v))
-    return np.sqrt(s/len(ref_vectors))
 
 
 def _write_model(enm, count, fh):

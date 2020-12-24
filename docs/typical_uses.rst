@@ -25,5 +25,6 @@ Here are some typical uses of ENCoM:
    dynamical_signatures
    conf_ensemble
    svib_mutations
+   transit_probs
 
 

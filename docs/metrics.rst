@@ -6,3 +6,5 @@ nrgten.metrics
 .. autofunction:: nrgten.metrics.get_amplitudes_for_fit
 .. autofunction:: nrgten.metrics.cumulative_overlap
 .. autofunction:: nrgten.metrics.get_overlaps
+.. autofunction:: nrgten.metrics.pca_ensemble
+.. autofunction:: nrgten.metrics.rmsip

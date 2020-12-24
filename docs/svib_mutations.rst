@@ -6,9 +6,9 @@ of being sensitive to the chemical nature of the amino acids, nucleic acids
 and/or ligands.
 
 This allows ENCoM to compute the change in vibrational entropy between WT and
-mutant forms of the same protein. In the nrgten_examples_ package, the FimA protein
+mutant forms of the same protein. In the nrgten_examples_ repository, the FimA protein
 from E. coli (PDB id 6R74) has had position 103 mutated from an isoleucine to
-a tyrosine using MODELLER (reference). The difference in vibrational entropy
+a tyrosine using MODELLER (`doi.org/10.1002/cpbi.3 <https://doi.org/10.1002/cpbi.3>`_). The difference in vibrational entropy
 between the WT and mutant can be computed in this way::
 
 	from nrgten.encom import ENCoM

@@ -2,7 +2,7 @@ Introduction
 ============
 
 Note: NRGTEN is free software, however please cite the following paper if
-you use it in your work: **NRGTEN paper reference**
+you use it in your work: https://arxiv.org/abs/2012.13062
 
 The Najmanovich Research Group Toolkit for Elastic Networks (NRGTEN) is a Python
 package allowing the easy use and benchmarking of Elastic Network Models (ENMs) such as ANM, STeM

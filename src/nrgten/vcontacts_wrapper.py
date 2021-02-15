@@ -34,6 +34,9 @@ def get_surface_dict_private(pdb_str, n_atoms):
         chain = chains[i]
         key = "{}|{}|{}".format(resiname, resinum, chain)
         if i % 100 == 0:
+            if anum == 0: # TODO: find out what wizardry is happening inside vcon for some atoms to have no contacts at all (and remove this unelegant solution)
+                i += 1
+                continue
             sas = dists[i] # from atoms have -1 in the areas array to distinguish them. SAS is thus in dists.
             last_anum = anum
             if anum in sd:
@@ -103,6 +106,7 @@ def try_to_compile_vcon(libpath):
     subprocess.call(args)
     if args2 is not None:
         subprocess.call(args2)
+
 
 
 

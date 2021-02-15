@@ -1858,11 +1858,13 @@ void assign_radii(struct atom *PDB, long int PDBtot)
 				// O2H0 is same radius as O2H1
 				if(PDB[atomi].atomname[3] == 'P') { // part of phosphate
 					PDB[atomi].radius = radius[7];  // O1H0
-				} else if(PDB[atomi].atomname[3] == '*') { // ribose
+				} else if(PDB[atomi].atomname[3] == '*' || PDB[atomi].atomname[3] == '\'') { // ribose
 					PDB[atomi].radius = radius[8];  // O2H1 ( also O2H0, same radius)
 				} else if(PDB[atomi].atomname[3] == ' ') { // base
 					PDB[atomi].radius = radius[7];  // O1H0
-				}
+				} else {
+				    PDB[atomi].radius = radius[8];
+				     }// default = ribose (added by Oli)
 			} else if(PDB[atomi].atomname[1] == 'N') {
 				// NITROGEN ATOM
 				if((PDB[atomi].atomname[2] == '2') || (PDB[atomi].atomname[2] == '4') || (PDB[atomi].atomname[2] == '6')) {
@@ -1872,7 +1874,7 @@ void assign_radii(struct atom *PDB, long int PDBtot)
 				}
 			} else if(PDB[atomi].atomname[1] == 'C') {
 				// CARBON ATOM
-				if(PDB[atomi].atomname[3] == '*') { // ribose carbon
+				if(PDB[atomi].atomname[3] == '*' || PDB[atomi].atomname[3] == '\'') { // ribose carbon
 					PDB[atomi].radius = radius[2];  // C4
 				} else if(PDB[atomi].atomname[2] == '2') {
 					if(PDB[atomi].res[2] == 'A') {

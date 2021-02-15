@@ -495,3 +495,7 @@ class ENCoM(ENM):
 
 def _distance(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
+if __name__ == "__main__":
+    test = ENCoM("/Users/Paracelsus/school/PhD/h21/projet/encom_rna/md_analysis/trajectories/mir125_AA_1_model1.pdb")
+    print(test.compute_bfactors())

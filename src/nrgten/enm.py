@@ -172,7 +172,7 @@ class ENM(metaclass=abc.ABCMeta):
                     return False
         return True
 
-    def compute_bfactors(self, filter=None):
+    def compute_bfactors(self, filter=None, modes_proportion=1):
         """Computes the predicted b-factors.
 
         The root-mean-square flutuations of every mass can be seen as a prediction of the experimental temperature
@@ -193,9 +193,10 @@ class ENM(metaclass=abc.ABCMeta):
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
         bfacts = []
+        end_j = int((n*3 - 6) * modes_proportion) + 6
         for i in range(n):
             bfact = 0
-            for j in range(6, n * 3):  # skips 1st 6 rotation-translation motions
+            for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
                 temp = 0
                 for k in range(3):
                     temp += self.eigvecs[j][3 * i + k] ** 2
@@ -578,22 +579,26 @@ class ENM(metaclass=abc.ABCMeta):
         assert self.get_n_masses() == len(vector)
         self.mol.set_bfactors(vector)
 
-    def write_dynamical_signature(self, outfile):
+    def write_dynamical_signature(self, outfile, normalize=False):
         """Writes a 'dynamical signature' to the output file specified.
 
         The dynamical signature is simply the predicted b_factor at every mass.
 
         Args:
-            outfile: the output file.
+            outfile (str): the output file.
+            normalize (bool, optional): if True, the signature is normalized to 1
         """
-        if not hasattr(self, "bfacts"):
+        if not hasattr(self, "bfacts") or self.bfacts is None:
             self.compute_bfactors()
         masses = self.mol.masses
         bfacts = self.bfacts
+        divider = 1
+        if normalize:
+            divider = np.sum(bfacts)
         assert len(masses) == len(bfacts)
         with open(outfile, "w") as f:
             for i in range(len(masses)):
-                f.write("{0}\t{1}\n".format(masses[i][4], bfacts[i]))
+                f.write("{0}\t{1}\n".format(masses[i][4], bfacts[i]/divider))
 
     def _write_to_file(self, filename):
         self.mol.write_to_file(filename)

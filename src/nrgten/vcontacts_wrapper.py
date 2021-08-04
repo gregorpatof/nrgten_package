@@ -56,11 +56,12 @@ def run_vcon(pdb_str, n_atoms, tried_compiling_once=False):
     libnames = []
     libnames = libnames + [x for x in libpath.glob("vconlib*.so")]
     libnames = libnames + [x for x in libpath.glob("vconlib*.dll")]
-    if len(libnames) == 0 and not tried_compiling_once:
+    if len(libnames) > 1:
+        raise ValueError("This is libnames: {0}\nand this is libpath: {1}".format(libnames, libpath))
+    elif (len(libnames) == 0 or source_was_updated(libnames[0])) and not tried_compiling_once:
         try_to_compile_vcon(libpath)
         return run_vcon(pdb_str, n_atoms, tried_compiling_once=True)
-    if len(libnames) != 1:
-        raise ValueError("This is libnames: {0}\nand this is libpath: {1}".format(libnames, libpath))
+
     assert len(libnames) == 1
     libname = libnames[0]
     # libname = "vcontacts/vcon_lib_python.so"
@@ -80,6 +81,20 @@ def run_vcon(pdb_str, n_atoms, tried_compiling_once=False):
     if ret != 0:
         raise ValueError("Error running Vcontacts, run_from_python produced return value {0}".format(ret))
     return atom_nums, atom_names, resi_nums, resi_names, chains, areas, dists
+
+
+def source_was_updated(libname):
+    """Checks if the Vcontacts source is more recent than the library.
+    """
+    libpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vcontacts')
+    lib_time = os.stat(libname).st_mtime
+    source_time = None
+    if str(libname).endswith(".dll"):
+        source_time = os.stat(os.path.join(libpath, 'Vcontacts-v1.2_for_python_windows.c')).st_mtime
+    else:
+        source_time = os.stat(os.path.join(libpath, 'Vcontacts-v1.2_for_python.c')).st_mtime
+    return lib_time < source_time
+
 
 
 def try_to_compile_vcon(libpath):

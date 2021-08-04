@@ -196,6 +196,59 @@ class ENCoM(ENM):
         V_tot = self._sum_hessians()
         return V_tot
 
+    def build_hybrid_hessian(self, other, solve=True):
+        """Builds the Hessian matrix with V1, V2, V3 from self and V4 from other.
+        """
+        assert isinstance(other, ENCoM)
+        if not self.mol.solved:
+            self.mol.solve()
+        masses = self.mol.masses
+        connect = self.mol.connect
+        bends = self.mol.bends
+        torsions = self.mol.torsions
+        if not other.mol.solved:
+            other.mol.solve()
+        resis = other.mol.resis
+        other_masses = other.mol.masses
+        if self.V1_H is None:
+            self.V1_H = self._build_V1_hessian(masses, connect)
+        if self.V2_H is None:
+            self.V2_H = self._build_V2_hessian(masses, bends)
+        if self.V3_H is None:
+            self.V3_H = self._build_V3_hessian(masses, torsions)
+        if other.V4_H is None:
+            other.V4_H = other._build_V4_hessian(other_masses, resis)
+        self.h = np.add(np.add(np.add(self.V1_H, self.V2_H), self.V3_H), other.V4_H)
+        if solve:
+            self.solve()
+
+    def build_hybrid_hessian_bij(self, other, solve=True):
+        assert isinstance(other, ENCoM)
+        if not self.mol.solved:
+            self.mol.solve()
+        masses = self.mol.masses
+        connect = self.mol.connect
+        bends = self.mol.bends
+        torsions = self.mol.torsions
+        resis = self.mol.resis
+        if not other.mol.solved:
+            other.mol.solve()
+        other_resis = other.mol.resis
+        other_masses = other.mol.masses
+        if self.V1_H is None:
+            self.V1_H = self._build_V1_hessian(masses, connect)
+        if self.V2_H is None:
+            self.V2_H = self._build_V2_hessian(masses, bends)
+        if self.V3_H is None:
+            self.V3_H = self._build_V3_hessian(masses, torsions)
+        if other.bij is None:
+            other.bij = other._compute_Bij(other_masses, other_resis)
+        temp_V4_H = self._build_V4_hessian(masses, resis, bij=other.bij)
+        self.h = np.add(np.add(np.add(self.V1_H, self.V2_H), self.V3_H), temp_V4_H)
+        if solve:
+            self.solve()
+
+
     def _sum_hessians(self):
         return np.add(np.add(np.add(self.V1_H, self.V2_H), self.V3_H), self.V4_H)
 
@@ -378,9 +431,11 @@ class ENCoM(ENM):
             self._hessian_helper_V2V3(hessian, doubles, dGd, const)
         return hessian
 
-    def _build_V4_hessian(self, masses, resis):
+    def _build_V4_hessian(self, masses, resis, bij=None):
         n = len(masses)
-        bij = self._compute_Bij(masses, resis)
+        if bij is None:
+            bij = self._compute_Bij(masses, resis)
+            self.bij = bij
         hessian = np.zeros((3 * n, 3 * n))
         axes = ["X", "Y", "Z"]
         indexes = ["i", "j"]
@@ -400,7 +455,6 @@ class ENCoM(ENM):
                     doubles = [x for x in zip([i, j], indexes)]
                     # self.hessian_helper_V1V4(hessian, doubles, bcoord, const)
                     self._hessian_helper_V1V4_optim(hessian, i, j, bcoord, const)
-        self.bij = bij
         return hessian
 
     def _get_weighted_surf_atomnum(self, sd, num_a, num_b, resi_a, resi_b, anums_dict):

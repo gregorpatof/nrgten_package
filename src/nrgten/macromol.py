@@ -621,7 +621,7 @@ class Macromol:
     def get_surface_dict(self):
         if self.alt_flag:
             self.clear_alt_tags()
-        return vcontacts_wrapper.get_surface_dict(self.get_pdb_file_as_string(), self.get_n_atoms())
+        return vcontacts_wrapper.get_surface_dict(self.pdb_file, self.get_n_atoms())
 
 
 def sort_atoms(resi):

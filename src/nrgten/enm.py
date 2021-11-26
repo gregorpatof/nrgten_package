@@ -193,7 +193,7 @@ class ENM(metaclass=abc.ABCMeta):
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
         bfacts = []
-        end_j = int((n*3 - 6) * modes_proportion) + 6
+        end_j = int((n * 3 - 6) * modes_proportion) + 6
         for i in range(n):
             bfact = 0
             for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
@@ -202,17 +202,9 @@ class ENM(metaclass=abc.ABCMeta):
                     temp += self.eigvecs[j][3 * i + k] ** 2
                 bfact += temp / self.eigvals[j]
             bfacts.append(bfact * 1000)
-        self.bfacts = bfacts
-        if filter is not None:
-            kept_bfacts = []
-            masses = self.mol.masses
-            for i, bfact in enumerate(self.bfacts):
-                resiname = masses[i][4]
-                if resiname.split('|')[0].split('.')[-1] in filter:
-                    kept_bfacts.append(bfact)
-            return kept_bfacts
-        else:
-            return self.bfacts
+        filtered_bfacts = self.filter_bfactors(bfacts, filter)
+        self.bfacts = filtered_bfacts
+        return filtered_bfacts
 
     def get_exp_bfacts(self, method="average", filter=None):
         """Extracts the experimental b-factors for every mass in the system.
@@ -258,6 +250,46 @@ class ENM(metaclass=abc.ABCMeta):
             ent += np.log(1 / self.eigvals[i])
         self.entropy = ent
         return ent
+
+    def filter_bfactors(self, bfacts, filter):
+        if filter is not None:
+            kept_bfacts = []
+            masses = self.mol.masses
+            for i, bfact in enumerate(self.bfacts):
+                resiname = masses[i][4]
+                if resiname.split('|')[0].split('.')[-1] in filter:
+                    kept_bfacts.append(bfact)
+            return kept_bfacts
+        else:
+            return bfacts
+
+    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1):
+        assert self.eigvals is not None
+        assert self.eigvecs is not None
+        n = int(len(self.eigvecs) / 3)
+        bfacts = []
+        end_j = int((n * 3 - 6) * modes_proportion) + 6
+        if beta is None:
+            beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
+        beta *= factor
+        e = 2.718281828459045
+        pi = 3.1415926535897932384626433832795028841971693993751
+        entros = [None, None, None, None, None, None]
+        for j in range(6, end_j):
+            vj = (self.eigvals[j] ** 0.5) / (2 * pi)
+            x = vj * beta
+            entros.append(x / (e ** x - 1) - np.log(1 - e ** (-1 * x)))
+        for i in range(n):
+            bfact = 0
+            for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
+                temp = 0
+                for k in range(3):
+                    temp += self.eigvecs[j][3 * i + k] ** 2
+                bfact += temp * entros[j]
+            bfacts.append(bfact * 1000)
+        filtered_bfacts = self.filter_bfactors(bfacts, filter)
+        self.bfacts = filtered_bfacts
+        return filtered_bfacts
 
     def compute_vib_entropy(self, beta=None, factor=1):
         """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).

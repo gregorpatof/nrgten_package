@@ -622,15 +622,22 @@ class ENM(metaclass=abc.ABCMeta):
         """
         if not hasattr(self, "bfacts") or self.bfacts is None:
             self.compute_bfactors()
-        masses = self.mol.masses
+        labels = self.get_mass_labels()
         bfacts = self.bfacts
         divider = 1
         if normalize:
             divider = np.sum(bfacts)
-        assert len(masses) == len(bfacts)
+        assert len(labels) == len(bfacts)
         with open(outfile, "w") as f:
-            for i in range(len(masses)):
-                f.write("{0}\t{1}\n".format(masses[i][4], bfacts[i]/divider))
+            for label, bfact in zip(labels, bfacts):
+                f.write("{0}\t{1}\n".format(label, bfact / divider))
+
+    def get_mass_labels(self):
+        masses = self.mol.masses
+        labels = []
+        for mass in masses:
+            labels.append(mass[4])
+        return labels
 
     def _write_to_file(self, filename):
         self.mol.write_to_file(filename)
@@ -672,6 +679,67 @@ class ENM(metaclass=abc.ABCMeta):
         if len(basis) < target_n:
             raise ValueError("Unable to produce {0} orthonormalized vectors for pdb file {1}".format(target_n, self.pdb_file))
         return np.array(basis)
+
+
+# End of ENM class, start of utility methods ###########################################################################
+
+
+def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, models=None, models_labels=None,
+                         additional_info_dict=None, add_info_labels=None):
+    if models is None:
+        from nrgten.encom import ENCoM
+        models = [ENCoM]
+        models_labels = ["ENCoM"]
+    if beta_values is None:
+        beta_values = [1]
+    if id_func is None:
+        id_func = lambda x: x.split('/')[-1]
+    assert isinstance(beta_values, list) and isinstance(models, list) and isinstance(models_labels, list)
+    assert len(models) == len(models_labels)
+    dynasigs_data = []
+    dynasigs_masslabels = None
+    ids_data = []
+    betas_data = []
+    mod_labels_data = []
+    for filename in filenames:
+        filename_id = id_func(filename)
+        for mod, mod_lab in zip(models, models_labels):
+            enm = mod(filename)
+            masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
+            for beta_val in beta_values:
+                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
+                if dynasigs_masslabels is None:
+                    dynasigs_masslabels = masslabels
+                else:
+                    validate_masslabels(masslabels, dynasigs_masslabels)
+                ids_data.append(filename_id)
+                betas_data.append(beta_val)
+                mod_labels_data.append(mod_lab)
+    colnames = ["id", "model", "beta"]
+    if additional_info_dict is not None:
+        assert add_info_labels is not None and isinstance(add_info_labels, list)
+        colnames = colnames + add_info_labels
+    sig_len = len(dynasigs_masslabels)
+    colnames = colnames + dynasigs_masslabels
+    df_strs = [" ".join(colnames)]
+    for i in range(len(dynasigs_data)):
+        assert len(dynasigs_data[i]) == sig_len
+        current_str = "{} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i])
+        if additional_info_dict is not None:
+            current_str = current_str + " " + " ".join(
+                [additional_info_dict[ids_data[i]][label] for label in add_info_labels])
+        current_str = current_str + " " + " ".join([str(x) for x in dynasigs_data[i]])
+        df_strs.append(current_str)
+    with open(outname, "w") as f:
+        f.write("\n".join(df_strs))
+        f.write("\n")
+
+
+def validate_masslabels(new_labels, old_labels):
+    assert len(new_labels) == len(old_labels)
+    for new, old in zip(new_labels, old_labels):
+        if new != old:
+            raise ValueError("problem with masslabels in generate_dynasigs_df: {} not equal to {}".format(new, old))
 
 
 

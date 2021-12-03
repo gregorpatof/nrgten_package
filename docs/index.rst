@@ -11,6 +11,7 @@ Welcome to NRGTEN's documentation!
    :caption: Index
    
    introduction
+   how_to_cite
    install_guide
    typical_uses
    advanced_uses

@@ -275,20 +275,57 @@ class ENM(metaclass=abc.ABCMeta):
         beta *= factor
         e = 2.718281828459045
         pi = 3.1415926535897932384626433832795028841971693993751
+        entros = [None, None, None, None, None, None]
+        for j in range(6, end_j):
+            vj = (self.eigvals[j] ** 0.5) / (2 * pi)
+            x = vj * beta
+            entros.append(x / (e ** x - 1) - np.log(1 - e ** (-1 * x)))
         for i in range(n):
             bfact = 0
             for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
                 temp = 0
                 for k in range(3):
                     temp += self.eigvecs[j][3 * i + k] ** 2
-                vi = (self.eigvals[i] ** 0.5) / (2 * pi)
-                x = vi * beta
-                entro = x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
-                bfact += temp / entro
+                bfact += temp * entros[j]
             bfacts.append(bfact * 1000)
         filtered_bfacts = self.filter_bfactors(bfacts, filter)
         self.bfacts = filtered_bfacts
         return filtered_bfacts
+
+    def compute_entro_props(self, beta, use_rigid_rotor=False):
+        e = 2.718281828459045
+        pi = 3.1415926535897932384626433832795028841971693993751
+        entros = []
+        for i in range(6, len(self.eigvals)):
+            if use_rigid_rotor:
+                entros.append(1/self.eigvals[i])
+            else:
+                vi = (self.eigvals[i] ** 0.5) / (2 * pi)
+                x = vi * beta
+                entros.append(x / (e ** x - 1) - np.log(1 - e ** (-1 * x)))
+        return entros
+
+    def compute_entro_props_detailed(self, beta, use_rigid_rotor=False):
+        e = 2.718281828459045
+        pi = 3.1415926535897932384626433832795028841971693993751
+        n = int(len(self.eigvecs) / 3)
+        entros = []
+
+        for i in range(6, len(self.eigvals)):
+            if use_rigid_rotor:
+                entros.append(1/self.eigvals[i])
+            else:
+                vi = (self.eigvals[i] ** 0.5) / (2 * pi)
+                x = vi * beta
+                entros.append(x / (e ** x - 1) - np.log(1 - e ** (-1 * x)))
+        detailed_bfacts = np.zeros((n, len(entros)))
+        for i in range(n):
+            for j in range(6, len(self.eigvals)):  # skips 1st 6 rotation-translation motions
+                temp = 0
+                for k in range(3):
+                    temp += self.eigvecs[j][3 * i + k] ** 2
+                detailed_bfacts[i][j-6] = temp * entros[j-6]
+        return detailed_bfacts
 
     def compute_vib_entropy(self, beta=None, factor=1):
         """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
@@ -621,15 +658,22 @@ class ENM(metaclass=abc.ABCMeta):
         """
         if not hasattr(self, "bfacts") or self.bfacts is None:
             self.compute_bfactors()
-        masses = self.mol.masses
+        labels = self.get_mass_labels()
         bfacts = self.bfacts
         divider = 1
         if normalize:
             divider = np.sum(bfacts)
-        assert len(masses) == len(bfacts)
+        assert len(labels) == len(bfacts)
         with open(outfile, "w") as f:
-            for i in range(len(masses)):
-                f.write("{0}\t{1}\n".format(masses[i][4], bfacts[i]/divider))
+            for label, bfact in zip(labels, bfacts):
+                f.write("{0}\t{1}\n".format(label, bfact/divider))
+
+    def get_mass_labels(self):
+        masses = self.mol.masses
+        labels = []
+        for mass in masses:
+            labels.append(mass[4])
+        return labels
 
     def _write_to_file(self, filename):
         self.mol.write_to_file(filename)
@@ -672,6 +716,66 @@ class ENM(metaclass=abc.ABCMeta):
             raise ValueError("Unable to produce {0} orthonormalized vectors for pdb file {1}".format(target_n, self.pdb_file))
         return np.array(basis)
 
+# End of ENM class, start of utility methods ###########################################################################
+
+
+def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, models=None, models_labels=None,
+                         additional_info_dict=None, add_info_labels=None):
+    if models is None:
+        from nrgten.encom import ENCoM
+        models = [ENCoM]
+        models_labels = ["ENCoM"]
+    if beta_values is None:
+        beta_values = [1]
+    if id_func is None:
+        id_func = lambda x: x.split('/')[-1]
+    assert isinstance(beta_values, list) and isinstance(models, list) and isinstance(models_labels, list)
+    assert len(beta_values) == len(models) == len(models_labels)
+    dynasigs_data = []
+    dynasigs_masslabels = None
+    ids_data = []
+    betas_data = []
+    mod_labels_data = []
+    for filename in filenames:
+        filename_id = id_func(filename)
+        for mod, mod_lab in zip(models, models_labels):
+            enm = mod(filename)
+            masslabels = enm.get_mass_labels()
+            for beta_val in beta_values:
+                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
+                if dynasigs_masslabels is None:
+                    dynasigs_masslabels = masslabels
+                else:
+                    validate_masslabels(masslabels, dynasigs_masslabels)
+                ids_data.append(filename_id)
+                betas_data.append(beta_val)
+                mod_labels_data.append(mod_lab)
+    colnames = ["id", "model", "beta"]
+    if additional_info_dict is not None:
+        assert add_info_labels is not None and isinstance(add_info_labels, list)
+        colnames = colnames + add_info_labels
+    sig_len = len(dynasigs_masslabels)
+    colnames = colnames + dynasigs_masslabels
+    df_str = [" ".join(colnames)]
+    for i in range(len(dynasigs_data)):
+        assert len(dynasigs_data[i]) == sig_len
+        current_str = "{} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i])
+
+
+def validate_masslabels(new_labels, old_labels):
+    assert len(new_labels) == len(old_labels)
+    for new, old in zip(new_labels, old_labels):
+        if new != old:
+            raise ValueError("problem with masslabels in generate_dynasigs_df: {} not equal to {}".format(new, old))
+
+
+
+
+
+
+if __name__ == "__main__":
+    filenames = [""]
+    generate_dynasigs_df(filenames, "test_sigdf.df")
 
 
 

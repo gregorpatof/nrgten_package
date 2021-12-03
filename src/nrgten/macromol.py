@@ -83,7 +83,10 @@ class Macromol:
         self.bends = self.find_bends(self.connect)
         self.torsions = self.find_torsions(self.connect)
         self.interact_pairs = self.find_interacting_pairs(self.torsions, self.bends, self.connect)
-        # TODO : create interact_pairs_no_V3, interact_pairs_covalent (no V2 and no V3)
+
+        # TODO : cre
+        #
+        #  ate interact_pairs_no_V3, interact_pairs_covalent (no V2 and no V3)
         self.solved = True
 
     def clear_info(self):

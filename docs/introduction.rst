@@ -1,6 +1,8 @@
 Introduction
 ============
 
+:ref:`how_to_cite`
+
 The Najmanovich Research Group Toolkit for Elastic Networks (NRGTEN) is a Python
 package allowing the easy use and benchmarking of Elastic Network Models (ENMs) such as ANM, STeM
 and ENCoM. The examples in this guide use ENCoM as the default

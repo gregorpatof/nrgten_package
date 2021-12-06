@@ -700,6 +700,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     dynasigs_masslabels = None
     ids_data = []
     betas_data = []
+    vib_entro_data = []
     mod_labels_data = []
     for filename in filenames:
         filename_id = id_func(filename)
@@ -708,6 +709,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
             masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
             for beta_val in beta_values:
                 dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
+                vib_entro_data.append(enm.compute_vib_entropy(beta=beta_val))
                 if dynasigs_masslabels is None:
                     dynasigs_masslabels = masslabels
                 else:
@@ -715,7 +717,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
                 ids_data.append(filename_id)
                 betas_data.append(beta_val)
                 mod_labels_data.append(mod_lab)
-    colnames = ["id", "model", "beta"]
+    colnames = ["id", "model", "beta", "vib_entro"]
     if additional_info_dict is not None:
         assert add_info_labels is not None and isinstance(add_info_labels, list)
         colnames = colnames + add_info_labels
@@ -724,7 +726,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     df_strs = [" ".join(colnames)]
     for i in range(len(dynasigs_data)):
         assert len(dynasigs_data[i]) == sig_len
-        current_str = "{} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i])
+        current_str = "{} {} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i], vib_entro_data[i])
         if additional_info_dict is not None:
             current_str = current_str + " " + " ".join(
                 [additional_info_dict[ids_data[i]][label] for label in add_info_labels])

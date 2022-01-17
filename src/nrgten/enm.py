@@ -327,7 +327,7 @@ class ENM(metaclass=abc.ABCMeta):
                 detailed_bfacts[i][j-6] = temp * entros[j-6]
         return detailed_bfacts
 
-    def compute_vib_entropy(self, beta=None, factor=1):
+    def compute_vib_entropy(self, beta=None, factor=1, as_list=False):
         """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
 
         Note:
@@ -348,12 +348,15 @@ class ENM(metaclass=abc.ABCMeta):
         beta *= factor
         e = 2.718281828459045
         pi = 3.1415926535897932384626433832795028841971693993751
-        entro = 0
+        indiv_entros = np.zeros(len(self.eigvals)-6)
         for i in range(6, len(self.eigvals)):
             vi = (self.eigvals[i] ** 0.5) / (2 * pi)
             x = vi * beta
-            entro += x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
-        return entro
+            indiv_entros[i-6] = x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
+        if as_list:
+            return indiv_entros
+        else:
+            return np.sum(indiv_entros)
 
     def compute_vib_enthalpy(self, beta=None, factor=1):
         """Vibrational enthalpy from the eigenfrequencies (without rigid-rotor approximation).
@@ -730,19 +733,21 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     if id_func is None:
         id_func = lambda x: x.split('/')[-1]
     assert isinstance(beta_values, list) and isinstance(models, list) and isinstance(models_labels, list)
-    assert len(beta_values) == len(models) == len(models_labels)
+    assert len(models) == len(models_labels)
     dynasigs_data = []
     dynasigs_masslabels = None
     ids_data = []
     betas_data = []
+    vib_entro_data = []
     mod_labels_data = []
     for filename in filenames:
         filename_id = id_func(filename)
         for mod, mod_lab in zip(models, models_labels):
             enm = mod(filename)
-            masslabels = enm.get_mass_labels()
+            masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
             for beta_val in beta_values:
                 dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
+                vib_entro_data.append(enm.compute_vib_entropy(beta=beta_val))
                 if dynasigs_masslabels is None:
                     dynasigs_masslabels = masslabels
                 else:
@@ -750,16 +755,24 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
                 ids_data.append(filename_id)
                 betas_data.append(beta_val)
                 mod_labels_data.append(mod_lab)
-    colnames = ["id", "model", "beta"]
+    colnames = ["id", "model", "beta", "vib_entro"]
     if additional_info_dict is not None:
         assert add_info_labels is not None and isinstance(add_info_labels, list)
         colnames = colnames + add_info_labels
     sig_len = len(dynasigs_masslabels)
     colnames = colnames + dynasigs_masslabels
-    df_str = [" ".join(colnames)]
+    df_strs = [" ".join(colnames)]
     for i in range(len(dynasigs_data)):
         assert len(dynasigs_data[i]) == sig_len
-        current_str = "{} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i])
+        current_str = "{} {} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i], vib_entro_data[i])
+        if additional_info_dict is not None:
+            current_str = current_str + " " + " ".join(
+                [additional_info_dict[ids_data[i]][label] for label in add_info_labels])
+        current_str = current_str + " " + " ".join([str(x) for x in dynasigs_data[i]])
+        df_strs.append(current_str)
+    with open(outname, "w") as f:
+        f.write("\n".join(df_strs))
+        f.write("\n")
 
 
 def validate_masslabels(new_labels, old_labels):
@@ -774,8 +787,8 @@ def validate_masslabels(new_labels, old_labels):
 
 
 if __name__ == "__main__":
-    filenames = [""]
-    generate_dynasigs_df(filenames, "test_sigdf.df")
+    filenames = ["../../tests/closed_clean.pdb", "../../tests/open_clean.pdb"]
+    generate_dynasigs_df(filenames, "test_sigdf.df", beta_values=[1,2])
 
 
 

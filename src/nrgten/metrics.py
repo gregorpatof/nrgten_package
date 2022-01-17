@@ -275,6 +275,7 @@ def rmsip(ref_vectors, vectors_list):
     Returns:
         float: The root mean square inner product (RMSIP).
     """
+    # TODO: fins out why it does not sum to 1 when considering all normal modes...
     s = 0
     for r in ref_vectors:
         for v in vectors_list:

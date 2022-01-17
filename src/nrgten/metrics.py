@@ -226,10 +226,16 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
     """
     if macromols_list is None:
         macromols_list = enm.mols[1:]
+    print("test")
     refmol = enm.mol
+    refmol_coords = refmol.get_3n_vector()
+    ref_mean = get_mean_xyz(refmol_coords)
+    refmol.translate_xyz(ref_mean)
+
     if filter is None:
         coords = np.zeros((3*len(refmol.masses), len(macromols_list)+1))
     else:
+        raise ValueError("filtering not yet supported for PCA ensembles")
         coords = np.zeros((3*refmol.get_filtered_n(filter), len(macromols_list) + 1))
     for i, mol in enumerate([refmol] + macromols_list):
         transvec, r = None, None
@@ -240,6 +246,7 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
         if filter is None:
             coords[:,i] = mol.get_3n_vector()
         else:
+            raise ValueError("filtering not yet supported for PCA ensembles")
             coords[:, i] = mol.get_filtered_3n_vector(filter)
         if i > 0:
             mol.translate_xyz(-transvec)
@@ -254,6 +261,8 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
     eigvecs = np.transpose(eigvecsmat)
     s = np.sum(eigvals)
     proportion_variance = eigvals/s
+    if variance_to_explain == "all":
+        return np.flip(proportion_variance, axis=0), np.flip(eigvecs, axis=0)
     total_var = 0
     n_significant = None
     for i in range(len(proportion_variance)-1, -1, -1):
@@ -262,6 +271,65 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
             n_significant = len(proportion_variance) - i
             break
     return np.flip(proportion_variance, axis=0)[0:n_significant], np.flip(eigvecs, axis=0)[0:n_significant]
+
+
+def get_mean_xyz(vector_3n):
+    assert len(vector_3n) % 3 == 0
+    mean_xyz = np.zeros(3)
+    for offset in [0, 1, 2]:
+        for i in range(0, len(vector_3n), 3):
+            mean_xyz[offset] += vector_3n[i+offset]
+    mean_xyz /= (len(vector_3n)/3)
+    return mean_xyz
+
+
+def get_pcs_no_rot_tran(enm_model, proportion_nrt_variance=0.99):
+    assert len(enm_model.mols) > 1
+    if enm_model.eigvals is None:
+        enm_model.solve()
+    variances, pcs = pca_ensemble(enm_model, variance_to_explain="all")
+    rot_tran_vecs = enm_model.eigvecs[:6]
+    nrt_vars = np.zeros(len(variances))
+    nrt_vars_sum = np.zeros(len(variances))
+    for i, pc in enumerate(pcs):
+        val = rmsip(rot_tran_vecs, [pc])
+        print(val)
+        nrt_vars[i] = variances[i] * (1 - val)
+    nrt_vars /= np.sum(nrt_vars)
+    for i in range(len(nrt_vars)):
+        nrt_vars_sum[i] = np.sum(nrt_vars[:i+1])
+        print(nrt_vars_sum[i], nrt_vars[i], variances[i], np.sum(variances[:i+1]))
+        if nrt_vars_sum[i] >= proportion_nrt_variance:
+            break
+    raise ValueError()
+    max_vecs = len(rot_tran_vecs[0])
+    n = len(pcs)
+    n_target_vecs = n+6
+    if n_target_vecs > max_vecs:
+        n_target_vecs = max_vecs
+    return _gram_schmidt(np.append(rot_tran_vecs, pcs, axis=0), n_target_vecs)[6:]
+
+
+def _gram_schmidt(vectors, target_n):
+    # TODO : apply this to RMSIP to get rid of rot/trans contibution
+    """ From https://gist.github.com/iizukak/1287876/edad3c337844fac34f7e56ec09f9cb27d4907cc7#gistcomment-1871542.
+        Gram-schmidt orthonormalization of row vectors.
+    """
+    basis = []
+    for v in vectors:
+        x = np.zeros((len(v)))
+        for b in basis:
+            x += np.dot(v, b)*b
+        w = v - x
+        # w = v - np.sum(np.dot(v,b)*b  for b in basis) # Calling np.sum(generator) is deprecated
+        if (w > 1e-10).any():
+            basis.append(w/np.linalg.norm(w))
+        if len(basis) == target_n:
+            break
+    if len(basis) < target_n:
+        raise ValueError("Unable to produce {0} orthonormalized vectors".format(target_n))
+    return np.array(basis)
+
 
 def rmsip(ref_vectors, vectors_list):
     """Root mean square inner product, as defined in Leo-Macias et al. 2005.
@@ -275,7 +343,6 @@ def rmsip(ref_vectors, vectors_list):
     Returns:
         float: The root mean square inner product (RMSIP).
     """
-    # TODO: fins out why it does not sum to 1 when considering all normal modes...
     s = 0
     for r in ref_vectors:
         for v in vectors_list:
@@ -311,15 +378,19 @@ def _motion(enm, mode_index, stepsize, maxrmsd, filename):
         Important note: mode_index starts at 1, which is the first nontrivial motion (7th normal mode).
     """
     mode = np.copy(enm.eigvecs[mode_index+5])
-    modermsd = _rmsd_of_3n_vector(mode)
-    mode *= stepsize/modermsd
-    nsteps = int(maxrmsd/stepsize)
+    _motion_3n_vector(enm, mode, stepsize, maxrmsd, filename)
+
+
+def _motion_3n_vector(enm, vector_3n, stepsize, maxrmsd, filename):
+    modermsd = _rmsd_of_3n_vector(vector_3n)
+    vector_3n *= stepsize / modermsd
+    nsteps = int(maxrmsd / stepsize)
     count = 1
     offset = 0
     with open(filename, "w") as fh:
         _write_model(enm, count, fh)
         for i, sign in enumerate([1, -1, 1, -1]):
-            mode *= sign
+            vector_3n *= sign
             if i == 3:
                 offset = 1
             for i in range(nsteps - offset):
@@ -420,10 +491,10 @@ if __name__ == "__main__":
     # test_boltzmann_squares()
 
 
-    open = ENCoM("../../tests/open_clean.pdb")
-    closed = ENCoM("../../tests/closed_clean.pdb")
-    print(get_amplitudes_for_fit(open, closed, 10))
-    # print(overlap(open, closed, 10))
-    # print(overlap(closed, open, 10))
-    # print(open.compute_bfactors()[:15])
+    open_state = ENCoM("../../tests/open_clean.pdb")
+    closed_state = ENCoM("../../tests/closed_clean.pdb")
+    print(get_amplitudes_for_fit(open_state, closed_state, 10))
+    # print(overlap(open_state, closed_state, 10))
+    # print(overlap(closed_state, open_state, 10))
+    # print(open_state.compute_bfactors()[:15])
 

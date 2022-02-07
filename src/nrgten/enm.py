@@ -685,7 +685,8 @@ class ENM(metaclass=abc.ABCMeta):
 
 
 def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, models=None, models_labels=None,
-                         additional_info_dict=None, add_info_labels=None):
+                         additional_info_dict=None, add_info_labels=None,
+                         added_atypes_list=None, added_massdef_list=None, get_cf_from_file=False):
     if models is None:
         from nrgten.encom import ENCoM
         models = [ENCoM]
@@ -696,16 +697,22 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
         id_func = lambda x: x.split('/')[-1]
     assert isinstance(beta_values, list) and isinstance(models, list) and isinstance(models_labels, list)
     assert len(models) == len(models_labels)
+    if added_atypes_list is not None:
+        assert len(added_atypes_list) == len(filenames) == len(added_massdef_list)
     dynasigs_data = []
     dynasigs_masslabels = None
     ids_data = []
     betas_data = []
     vib_entro_data = []
     mod_labels_data = []
-    for filename in filenames:
+    cfs = []
+    for i, filename in enumerate(filenames):
         filename_id = id_func(filename)
         for mod, mod_lab in zip(models, models_labels):
-            enm = mod(filename)
+            if added_atypes_list is None:
+                enm = mod(filename)
+            else:
+                enm = mod(filename, added_atypes=added_atypes_list[i], added_massdef=added_massdef_list[i])
             masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
             for beta_val in beta_values:
                 dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
@@ -717,7 +724,21 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
                 ids_data.append(filename_id)
                 betas_data.append(beta_val)
                 mod_labels_data.append(mod_lab)
+                if get_cf_from_file:
+                    cf = None
+                    with open(filename) as f:
+                        lines = f.readlines()
+                    for line in lines:
+                        if line.startswith("REMARK CF="):
+                            cf = float(line[10:])
+                            break
+                    if cf is not None:
+                        cfs.append(cf)
+                    else:
+                        raise ValueError("Could not find CF line in file {}".format(filename))
     colnames = ["id", "model", "beta", "vib_entro"]
+    if get_cf_from_file:
+        colnames.append("cf")
     if additional_info_dict is not None:
         assert add_info_labels is not None and isinstance(add_info_labels, list)
         colnames = colnames + add_info_labels
@@ -727,6 +748,8 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     for i in range(len(dynasigs_data)):
         assert len(dynasigs_data[i]) == sig_len
         current_str = "{} {} {} {}".format(ids_data[i], mod_labels_data[i], betas_data[i], vib_entro_data[i])
+        if get_cf_from_file:
+            current_str = current_str + " {}".format(cfs[i])
         if additional_info_dict is not None:
             current_str = current_str + " " + " ".join(
                 [additional_info_dict[ids_data[i]][label] for label in add_info_labels])

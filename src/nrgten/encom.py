@@ -128,6 +128,7 @@ class ENCoM(ENM):
                          use_pickle=use_pickle, solve_mol=solve_mol, one_mass=one_mass)
 
     def _get_pickle_file(self):
+        # TODO : better logic
         pickle_file = self.pdb_file.split('.')[0]
         if self.use_stem:
             pickle_file += ".stem.pickle"

@@ -142,7 +142,7 @@ int run_from_python(char filedata[], int atom_nums[], char atom_names[], int res
               char chains[], float areas[], float dists[]) { // duplicated by Olivier
     int      atomi;           // atom number of atomzero
     long int PDBtot;          // number of PDB atoms
-
+    numcarec = 0;
     PDB = mock_read_PDB(filedata, PDB, &PDBtot);
     // initialize contact atom index
     ca_index = malloc(PDBtot*sizeof(long int));

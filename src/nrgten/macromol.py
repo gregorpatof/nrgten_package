@@ -1,5 +1,5 @@
 import nrgten.parser as parser
-import nrgten.vcontacts_wrapper as vcontacts_wrapper
+import pyvcon.vcontacts_wrapper as vcontacts_wrapper
 import os
 import numpy as np
 
@@ -621,7 +621,12 @@ class Macromol:
     def get_surface_dict(self):
         if self.alt_flag:
             self.clear_alt_tags()
-        return vcontacts_wrapper.get_surface_dict(self.get_pdb_file_as_string(), self.get_n_atoms())
+        tmp_pdb_file = self.pdb_file + ".tmp"
+        with open(tmp_pdb_file, "w") as f:
+            self.write_to_filehandle(f)
+        sd = vcontacts_wrapper.get_surface_dict(tmp_pdb_file, self.get_n_atoms())
+        os.remove(tmp_pdb_file)
+        return sd
 
 
 def sort_atoms(resi):

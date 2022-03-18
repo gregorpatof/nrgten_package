@@ -32,14 +32,7 @@ rigid than the WT.
 
 .. note::
 
-    Small numerical inaccuracies in the computation of the eigenvectors and eigenvalues from the Hessian
-    matrix can give rise to slightly different entropies from one run to another or on different
-    architectures. These are usually small in amplitude and should not change the predicted effect of
-    the mutation (more rigid or more flexible).
-
-.. note::
-
-    NRGTEN requiThe beta parameter, which is the Boltzmann scaling factor, is set to 1 in
+    The beta parameter, which is the Boltzmann scaling factor, is set to 1 in
     the above examples because preliminary work has shown this value to give the
     best results when trying to predict experimental measurements of ΔΔG.
 

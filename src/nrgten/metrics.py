@@ -226,7 +226,6 @@ def pca_ensemble(enm, macromols_list=None, variance_to_explain=0.99, filter=None
     """
     if macromols_list is None:
         macromols_list = enm.mols[1:]
-    print("test")
     refmol = enm.mol
     refmol_coords = refmol.get_3n_vector()
     ref_mean = get_mean_xyz(refmol_coords)
@@ -291,23 +290,36 @@ def get_pcs_no_rot_tran(enm_model, proportion_nrt_variance=0.99):
     rot_tran_vecs = enm_model.eigvecs[:6]
     nrt_vars = np.zeros(len(variances))
     nrt_vars_sum = np.zeros(len(variances))
+    vals = np.zeros(len(variances))
     for i, pc in enumerate(pcs):
-        val = rmsip(rot_tran_vecs, [pc])
-        print(val)
+        val = rmsip([pc], rot_tran_vecs)
+        # val = rmsip(rot_tran_vecs, [pc])
+        vals[i] = val
         nrt_vars[i] = variances[i] * (1 - val)
     nrt_vars /= np.sum(nrt_vars)
+    nrt_vars, pcs = reorder_pcs(pcs, nrt_vars)
+
+    n_vecs = None
     for i in range(len(nrt_vars)):
         nrt_vars_sum[i] = np.sum(nrt_vars[:i+1])
-        print(nrt_vars_sum[i], nrt_vars[i], variances[i], np.sum(variances[:i+1]))
         if nrt_vars_sum[i] >= proportion_nrt_variance:
+            n_vecs = i+1
             break
-    raise ValueError()
-    max_vecs = len(rot_tran_vecs[0])
-    n = len(pcs)
-    n_target_vecs = n+6
+    if n_vecs is None:
+        raise ValueError("Not able to get to target variance proportion")
+    max_vecs = len(pcs)
+    n_target_vecs = n_vecs+6
     if n_target_vecs > max_vecs:
         n_target_vecs = max_vecs
-    return _gram_schmidt(np.append(rot_tran_vecs, pcs, axis=0), n_target_vecs)[6:]
+    return nrt_vars[:n_vecs], _gram_schmidt(np.append(rot_tran_vecs, pcs, axis=0), n_target_vecs)[6:]
+
+
+def reorder_pcs(pcs, nrt_vars):
+    all_array = np.zeros((len(pcs), len(pcs[0])+1))
+    all_array[:, 0] = nrt_vars
+    all_array[:, 1:] = pcs
+    sorted_array = all_array[np.argsort(-all_array[:, 0])]
+    return sorted_array[:, 0], sorted_array[:, 1:]
 
 
 def _gram_schmidt(vectors, target_n):
@@ -348,6 +360,23 @@ def rmsip(ref_vectors, vectors_list):
         for v in vectors_list:
             s += np.square(np.dot(r, v))
     return np.sqrt(s/len(ref_vectors))
+
+
+def nco(ref_vectors, ref_variances, vectors_list):
+    ref_norms = np.zeros(len(ref_vectors))
+    norms_list = np.zeros(len(vectors_list))
+    for j, vec in enumerate(vectors_list):
+        norms_list[j] = np.linalg.norm(vec)
+    nco_result = []
+    for i, ref_vec in enumerate(ref_vectors):
+        nco_result.append([])
+        ref_norms[i] = np.linalg.norm(ref_vec)
+        overlaps_sq = np.zeros(len(vectors_list))
+        for j, vec in enumerate(vectors_list):
+            overlaps_sq[j] = (np.dot(vec, ref_vec)/(norms_list[j]*ref_norms[i]))**2
+            nco_result[i].append(ref_variances[i]*np.sqrt(np.sum(overlaps_sq[:j+1])))
+    return nco_result
+
 
 def _fit_to_reference_macromol_DEPRECATED(ref, target):
     rmsd, r, transvec = rmsd_kabsch(ref.masscoords, target.masscoords)
@@ -394,7 +423,7 @@ def _motion_3n_vector(enm, vector_3n, stepsize, maxrmsd, filename):
             if i == 3:
                 offset = 1
             for i in range(nsteps - offset):
-                enm._translate_3n_vector(mode)
+                enm._translate_3n_vector(vector_3n)
                 _write_model(enm, count, fh)
                 count += 1
 

@@ -731,7 +731,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     if beta_values is None:
         beta_values = [1]
     if id_func is None:
-        id_func = lambda x: x.split('/')[-1]
+        id_func = lambda x: x.split('/')[-1].split('.')[0]
     assert isinstance(beta_values, list) and isinstance(models, list) and isinstance(models_labels, list)
     assert len(models) == len(models_labels)
     dynasigs_data = []
@@ -743,11 +743,18 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     for filename in filenames:
         filename_id = id_func(filename)
         for mod, mod_lab in zip(models, models_labels):
-            enm = mod(filename)
-            masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
+            enm_mod = mod(filename)
+            masslabels = [x.split('.')[-1] for x in enm_mod.get_mass_labels()]  # mass name only to allow for mutations
             for beta_val in beta_values:
-                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
-                vib_entro_data.append(enm.compute_vib_entropy(beta=beta_val))
+                ds = [float(-1) for x in masslabels]
+                entro = float(-1)
+                try:
+                    ds = enm_mod.compute_bfactors_boltzmann(beta=beta_val)
+                    entro = enm_mod.compute_vib_entropy(beta=beta_val)
+                except:
+                    pass
+                dynasigs_data.append(ds)
+                vib_entro_data.append(entro)
                 if dynasigs_masslabels is None:
                     dynasigs_masslabels = masslabels
                 else:

@@ -8,7 +8,7 @@ with open(os.path.join(HERE, "README.md")) as f:
 
 setuptools.setup(
     name="nrgten",
-    version="1.0.5.bootleg",
+    version="1.0.7.bootleg",
     author="Olivier Mailhot",
     description="Najmanovich Research Group Toolkit for Elastic Networks",
     long_description=README,

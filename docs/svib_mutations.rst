@@ -30,10 +30,19 @@ using::
 We see that it is around 0.004, which means that the mutant is slightly more
 rigid than the WT.
 
+
 .. note::
 
     The beta parameter, which is the Boltzmann scaling factor, is set to 1 in
     the above examples because preliminary work has shown this value to give the
     best results when trying to predict experimental measurements of ΔΔG.
+
+.. note::
+
+    Since the ENCoM model is pseudo-physical, the vibrational entropy value does not
+    have definite units (but it still represents a measurement of energy per temperature).
+    It is however possible to select a beta parameter that
+    gives a close match to experimental data, or to use the vibrational entropy
+    value in a linear predictor which will match experimental data.
 
 

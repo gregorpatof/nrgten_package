@@ -1,3 +1,5 @@
+import random
+
 import nrgten.parser as parser
 import pyvcon.vcontacts_wrapper as vcontacts_wrapper
 import os
@@ -70,7 +72,9 @@ class Macromol:
         self.masscoords = self.make_masscoords()
         self.solved = False
         self.coords_range, self.distmat, self.resi_cubes = None, None, None
-        self.connect, self.bends, self.torsions, self.interact_pairs = None, None, None, None
+        self.connect, self.bends, self.torsions = None, None, None
+        self.interact_pairs_level_dict = None
+
         # TODO : adapt to compute only necessary information for ANM
         if solve:
             self.solve()
@@ -82,7 +86,7 @@ class Macromol:
         self.connect = self.compute_connect_general()
         self.bends = self.find_bends(self.connect)
         self.torsions = self.find_torsions(self.connect)
-        self.interact_pairs = self.find_interacting_pairs(self.torsions, self.bends, self.connect)
+        self.interact_pairs_level_dict = self.find_interacting_pairs(self.torsions, self.bends, self.connect)
         self.solved = True
 
     def clear_info(self):
@@ -440,26 +444,40 @@ class Macromol:
         return connects
 
     def find_interacting_pairs(self, torsions, bends, connect):
-        ips = set()
-        for t in list(torsions) + list(bends):
+        ips_l1 = set()
+        ips_l2 = set()
+        ips_l3 = set()
+        for t in list(torsions):
             for i in range(len(t)):
                 for j in range(i + 1, len(t)):
                     if t[i] < t[j]:
-                        ips.add((t[i], t[j]))
+                        ips_l3.add((t[i], t[j]))
                     else:
-                        ips.add((t[j], t[i]))
+                        ips_l3.add((t[j], t[i]))
+        for b in list(bends):
+            for i in range(len(b)):
+                for j in range(i+1, len(b)):
+                    if b[i] < b[j]:
+                        ips_l2.add((b[i], b[j]))
+                    else:
+                        ips_l2.add((b[j], b[i]))
         for i in range(len(connect)):
             for j in range(i + 1, len(connect)):
                 if connect[i][j] != 0:
-                    ips.add((i, j))
-        self.print_verbose(ips)
-        return ips
+                    ips_l1.add((i, j))
+        ips_l2 = ips_l2.union(ips_l1)
+        ips_l3 = ips_l3.union(ips_l2)
+        self.print_verbose(ips_l1)
+        self.print_verbose(ips_l2)
+        self.print_verbose(ips_l3)
+        return {0: set(), 1: ips_l1, 2: ips_l2, 3: ips_l3}
 
-    def is_disconnected(self, i, j):
+    def is_disconnected(self, i, j, level=3):
+        ips = self.interact_pairs_level_dict[level]
         if i < j:
-            return not ((i, j) in self.interact_pairs)
+            return not ((i, j) in ips)
         else:
-            return not ((j, i) in self.interact_pairs)
+            return not ((j, i) in ips)
 
     def print_connect(self):
         for row in self.connect:
@@ -621,7 +639,7 @@ class Macromol:
     def get_surface_dict(self):
         if self.alt_flag:
             self.clear_alt_tags()
-        tmp_pdb_file = self.pdb_file + ".tmp"
+        tmp_pdb_file = self.pdb_file + "{}_{}.tmp".format(os.getpid(), random.randint(0, 1000))
         with open(tmp_pdb_file, "w") as f:
             self.write_to_filehandle(f)
         sd = vcontacts_wrapper.get_surface_dict(tmp_pdb_file, self.get_n_atoms())

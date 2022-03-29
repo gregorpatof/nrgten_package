@@ -4,24 +4,24 @@ import os
 import pickle
 
 
-class ANM(ENM):
-    """Class implementing the ANM (Anisotropic Network Model).
+class ANCoM(ENM):
+    """Class implementing the ANCoM (Anisotropic Network Contact Model).
 
-    Has 3 parameters: cutoff, power dependence and spring constant. Spring constant just rescales fluctuations but
-    doesn't change their relative values. Cutoff can be infinity (fully connected model). The original ANM paper is:
-    `doi.org/10.1016/S0006-3495(01)76033-X <https://doi.org/10.1016/S0006-3495(01)76033-X>`_ and the paper on varying
-    the power dependence is: `doi.org/10.1073/pnas.0902159106 <https://doi.org/10.1073/pnas.0902159106>`_
+    Has 4 parameters: cutoff, power dependence, spring constant and surface constant. Cutoff can be infinity
+    (fully connected model).
 
     Note:
-        ANM extends the `ENM` class, to see inherited attributes look at the documentation for `ENM`.
+        ANCoM extends the `ENM` class, to see inherited attributes look at the documentation for `ENM`.
 
     Attributes:
         cut (float): the distance cutoff for interaction between 2 masses.
         pd (float): the power dependence of the interaction.
-        kr (float): the interaction constant (does not change the solution but scales the values).
+        kr (float): the interaction constant.
+        ks (float): the surface constant. Gives more importance to the surface area in contact term.
     """
-    def __init__(self, pdb_file, cut=float('inf'), power_dependence=0, kr=1, solve=True, use_pickle=False,
-                 ignore_hetatms=False, atypes_list=None, massdef_list=None, solve_mol=True, one_mass=False):
+    def __init__(self, pdb_file, cut=float('inf'), power_dependence=0, kr=1, ks=1, solve=True, use_pickle=False,
+                 ignore_hetatms=False, atypes_list=None, massdef_list=None, solve_mol=True, one_mass=False,
+                 interact_const=3, interact_mat=None):
         """Constructor for the ANM class.
 
         Args:
@@ -45,6 +45,21 @@ class ANM(ENM):
         self.cut = cut
         self.pd = power_dependence
         self.kr = kr
+        self.ks = ks
+        self.ic = interact_const
+        if interact_mat is None:
+            ic = self.ic
+            # Presence of None is to enable indexing using the 1-8 numbers from Sobolev et al
+            interact_mat = [[None] * 9,
+                            [None, ic, ic, ic, 1, ic, ic, ic, ic],
+                            [None, ic, 1, ic, 1, ic, ic, ic, 1],
+                            [None, ic, ic, 1, 1, ic, ic, 1, ic],
+                            [None, 1, 1, 1, ic, ic, ic, ic, ic],
+                            [None, ic, ic, ic, ic, ic, ic, ic, ic],
+                            [None, ic, ic, ic, ic, ic, ic, ic, ic],
+                            [None, ic, ic, 1, ic, ic, ic, 1, ic],
+                            [None, ic, 1, ic, 1, ic, ic, ic, 1]]
+        self.inter_mat = interact_mat
         super().__init__(pdb_file, solve=solve, use_pickle=use_pickle, ignore_hetatms=ignore_hetatms,
                          atypes_list=atypes_list, massdef_list=massdef_list, solve_mol=solve_mol, one_mass=one_mass)
 
@@ -58,6 +73,9 @@ class ANM(ENM):
             self.mol.solve()
         masscoords = self.mol.masscoords
         distmat = self.mol.distmat
+        masses = self.mol.masses
+        resis = self.mol.resis
+        bij = self._compute_Bij(masses, resis)
         n = len(masscoords)
         hessian = np.zeros((3*n, 3*n))
         for i in range(n):
@@ -65,17 +83,18 @@ class ANM(ENM):
                 dist = distmat[i][j]
                 if dist <= self.cut:
                     dist_pd = dist ** (2 + self.pd)
+                    surf_term = self.ks * bij[i][j]
 
                     # diagonal of the off-diagonal 3x3 element and update diagonal of diagonal element
                     for k in range(3):
-                        val = 2 * self.kr * (masscoords[j][k] - masscoords[i][k]) ** 2 / dist_pd
+                        val = 2 * (self.kr + surf_term) * (masscoords[j][k] - masscoords[i][k]) ** 2 / dist_pd
                         hessian[3 * i + k][3 * j + k] = -val
                         hessian[3 * i + k][3 * i + k] += val
                         hessian[3 * j + k][3 * j + k] += val
 
                     # off-diagonals of the off-diagonal 3x3 element and update off-diagonal of diagonal element
                     for (k, l) in ((0, 1), (0, 2), (1, 2)):
-                        val = 2 * self.kr * (masscoords[j][k] - masscoords[i][k]) * \
+                        val = 2 * (self.kr + surf_term) * (masscoords[j][k] - masscoords[i][k]) * \
                               (masscoords[j][l] - masscoords[i][l]) / dist_pd
                         hessian[3 * i + k][3 * j + l] = -1 * val
                         hessian[3 * i + l][3 * j + k] = -1 * val

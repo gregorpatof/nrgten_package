@@ -42,7 +42,7 @@ class ENCoM(ENM):
     def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=3,
                  power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
                  added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
-                 ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False):
+                 ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3):
         """Constructor for the ENCoM class.
 
         Args:
@@ -101,6 +101,7 @@ class ENCoM(ENM):
         self.epsi = epsi
         self.ic = interact_const
         self.bfact_params = bfact_params
+        self.interact_level = interact_level
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
             self.kr = 1000
             self.ktheta = 100000
@@ -256,10 +257,11 @@ class ENCoM(ENM):
     def _build_V1_hessian(self, masses, connect_mat):
         n = len(masses)
         hessian = np.zeros((3 * n, 3 * n))
+        distmat = self.mol.distmat
         for i in range(n):
             for j in range(i + 1, n):
                 if connect_mat[i][j] != 0:
-                    dist = _distance(masses[i], masses[j])
+                    dist = distmat[i][j]
                     dist_sq = dist ** 2
 
                     # diagonal of the off-diagonal 3x3 element and update diagonal of diagonal element
@@ -458,94 +460,11 @@ class ENCoM(ENM):
                     self._hessian_helper_V1V4_optim(hessian, i, j, bcoord, const)
         return hessian
 
-    def _get_weighted_surf_atomnum(self, sd, num_a, num_b, resi_a, resi_b, anums_dict):
-        try:
-            i = self.atypes_dict[resi_a][anums_dict[num_a].name]
-        except KeyError:
-            self.not_there.add((resi_a, anums_dict[num_a]))
-            return 0
-        try:
-            j = self.atypes_dict[resi_b][anums_dict[num_b].name]
-        except KeyError:
-            self.not_there.add((resi_b, anums_dict[num_b]))
-            return 0
-        return sd[num_a][num_b] * self.inter_mat[i][j]
-
-    def _get_total_surf_atomnum(self, sd, anums_list, i, j, resi_a, resi_b, anums_dict):
-        if resi_a == "LIG" and resi_b == "ASP":
-            dum = 0
-        surf_tot = 0
-        for num_a in anums_list[i]:
-            for num_b in anums_list[j]:
-                try:
-                    if num_b in sd[num_a]:
-                        surf_tot += self._get_weighted_surf_atomnum(sd, num_a, num_b, resi_a, resi_b, anums_dict)
-                    if num_a in sd[num_b]:
-                        surf_tot += self._get_weighted_surf_atomnum(sd, num_b, num_a, resi_b, resi_a, anums_dict)
-                except:
-                    print("Error in surface computation, residues {0} and {1}, file {2}".format(resi_a, resi_b,
-                                                                                                self.mol.pdb_file))
-                    raise
-        return surf_tot
-
-    def _compute_Bij(self, masses, resis):
-        """ Computes the Bij term in the ENCoM potential, which is the
-            modulating factor of the long-range interaction (V4) term calculated
-            according to atomic surface complementarity.
-        """
-        sd = self.mol.get_surface_dict()
-        n = len(masses)
-        bij = np.zeros((n, n))
-        atomnums_list = self._make_atomnums_list(masses, resis)
-        atomnums_dict = self._make_atomnums_dict(resis)
-        self._print_verbose(self.atypes_dict)
-        for i in range(n):
-            ma = masses[i]  # mass_a
-            ka = ma[4]  # key_a
-            resiname_a = ka.split('|')[0].split('.')[0]
-            for j in range(i + 1, n):
-                mb = masses[j]
-                kb = mb[4]
-                resiname_b = kb.split('|')[0].split('.')[0]
-                try:
-                    surf_tot = self._get_total_surf_atomnum(sd, atomnums_list, i, j, resiname_a, resiname_b, atomnums_dict)
-                except:
-                    e = sys.exc_info()[0]
-                    print("Error in surface computation, file {0}".format(self.mol.pdb_file))
-                    raise e
-                bij[i][j] = surf_tot
-                bij[j][i] = surf_tot
-        self._print_verbose(self.not_there)
-        return bij
-
-    def _make_atomnums_list(self, masses, resis):
-        """ Makes a list which corresponds in index with the masses received and
-            which contains lists of atom numbers for every mass.
-        """
-        assert len(masses) == len(resis)
-        n = len(masses)
-        atomnums_list = []
-        for i in range(n):
-            resi = resis[masses[i][4]]
-            anums = []
-            for a in resi:
-                anums.append(resi[a].num)
-            atomnums_list.append(anums)
-        return atomnums_list
-
-    def _make_atomnums_dict(self, resis):
-        """ Makes a dictionary associating each atom number to an Atom object.
-        """
-        numdict = dict()
-        for r in resis:
-            for a in resis[r]:
-                numdict[resis[r][a].num] = resis[r][a]
-        return numdict
 
     def _is_long_range(self, i, j):
         if i == j:
             return False
-        return self.mol.is_disconnected(i, j)
+        return self.mol.is_disconnected(i, j, level=self.interact_level)
 
 
 def _distance(a, b):

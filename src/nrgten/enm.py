@@ -680,6 +680,91 @@ class ENM(metaclass=abc.ABCMeta):
             raise ValueError("Unable to produce {0} orthonormalized vectors for pdb file {1}".format(target_n, self.pdb_file))
         return np.array(basis)
 
+    def _get_weighted_surf_atomnum(self, sd, num_a, num_b, resi_a, resi_b, anums_dict):
+        try:
+            i = self.atypes_dict[resi_a][anums_dict[num_a].name]
+        except KeyError:
+            self.not_there.add((resi_a, anums_dict[num_a]))
+            return 0
+        try:
+            j = self.atypes_dict[resi_b][anums_dict[num_b].name]
+        except KeyError:
+            self.not_there.add((resi_b, anums_dict[num_b]))
+            return 0
+        return sd[num_a][num_b] * self.inter_mat[i][j]
+
+    def _get_total_surf_atomnum(self, sd, anums_list, i, j, resi_a, resi_b, anums_dict):
+        if resi_a == "LIG" and resi_b == "ASP":
+            dum = 0
+        surf_tot = 0
+        for num_a in anums_list[i]:
+            for num_b in anums_list[j]:
+                try:
+                    if num_b in sd[num_a]:
+                        surf_tot += self._get_weighted_surf_atomnum(sd, num_a, num_b, resi_a, resi_b, anums_dict)
+                    if num_a in sd[num_b]:
+                        surf_tot += self._get_weighted_surf_atomnum(sd, num_b, num_a, resi_b, resi_a, anums_dict)
+                except:
+                    print("Error in surface computation, residues {0} and {1}, file {2}".format(resi_a, resi_b,
+                                                                                                self.mol.pdb_file))
+                    raise
+        return surf_tot
+
+    def _compute_Bij(self, masses, resis):
+        """ Computes the Bij term in the ENCoM potential, which is the
+            modulating factor of the long-range interaction (V4) term calculated
+            according to atomic surface complementarity.
+        """
+        sd = self.mol.get_surface_dict()
+        n = len(masses)
+        bij = np.zeros((n, n))
+        atomnums_list = self._make_atomnums_list(masses, resis)
+        atomnums_dict = self._make_atomnums_dict(resis)
+        self._print_verbose(self.atypes_dict)
+        for i in range(n):
+            ma = masses[i]  # mass_a
+            ka = ma[4]  # key_a
+            resiname_a = ka.split('|')[0].split('.')[0]
+            for j in range(i + 1, n):
+                mb = masses[j]
+                kb = mb[4]
+                resiname_b = kb.split('|')[0].split('.')[0]
+                try:
+                    surf_tot = self._get_total_surf_atomnum(sd, atomnums_list, i, j, resiname_a, resiname_b, atomnums_dict)
+                except:
+                    e = sys.exc_info()[0]
+                    print("Error in surface computation, file {0}".format(self.mol.pdb_file))
+                    raise e
+                bij[i][j] = surf_tot
+                bij[j][i] = surf_tot
+        self._print_verbose(self.not_there)
+        return bij
+
+    def _make_atomnums_list(self, masses, resis):
+        """ Makes a list which corresponds in index with the masses received and
+            which contains lists of atom numbers for every mass.
+        """
+        assert len(masses) == len(resis)
+        n = len(masses)
+        atomnums_list = []
+        for i in range(n):
+            resi = resis[masses[i][4]]
+            anums = []
+            for a in resi:
+                anums.append(resi[a].num)
+            atomnums_list.append(anums)
+        return atomnums_list
+
+    def _make_atomnums_dict(self, resis):
+        """ Makes a dictionary associating each atom number to an Atom object.
+        """
+        numdict = dict()
+        for r in resis:
+            for a in resis[r]:
+                numdict[resis[r][a].num] = resis[r][a]
+        return numdict
+
+
 
 # End of ENM class, start of utility methods ###########################################################################
 
@@ -706,9 +791,9 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
     vib_entro_data = []
     mod_labels_data = []
     cfs = []
-    for i, filename in enumerate(filenames):
-        filename_id = id_func(filename)
-        for mod, mod_lab in zip(models, models_labels):
+    for mod, mod_lab in zip(models, models_labels):
+        for i, filename in enumerate(filenames):
+            filename_id = id_func(filename)
             if added_atypes_list is None:
                 enm = mod(filename)
             else:

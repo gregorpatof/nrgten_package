@@ -58,7 +58,7 @@ class ANCoM(ENM):
                             [None, ic, ic, ic, ic, ic, ic, ic, ic],
                             [None, ic, ic, ic, ic, ic, ic, ic, ic],
                             [None, ic, ic, 1, ic, ic, ic, 1, ic],
-                            [None, ic, 1, ic, 1, ic, ic, ic, 1]]
+                            [None, ic, 1, ic, ic, ic, ic, ic, 1]]
         self.inter_mat = interact_mat
         super().__init__(pdb_file, solve=solve, use_pickle=use_pickle, ignore_hetatms=ignore_hetatms,
                          atypes_list=atypes_list, massdef_list=massdef_list, solve_mol=solve_mol, one_mass=one_mass)

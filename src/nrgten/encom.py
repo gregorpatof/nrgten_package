@@ -40,9 +40,11 @@ class ENCoM(ENM):
         """
 
     def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=3,
+                 null_interact_const=1,
                  power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
                  added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
-                 ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3):
+                 ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3,
+                 teruel2021_legacy=False):
         """Constructor for the ENCoM class.
 
         Args:
@@ -76,6 +78,8 @@ class ENCoM(ENM):
                                         of the residues will be inferred.
             one_mass (bool, optional): If True, nucleic acids will be built using only one mass per nucleotide instead
                                        of 3.
+            teruel2021_legacy (bool, optional): If True, the parameters will perfectly reproduce the vibrational entropy
+                                                calculations in the Teruel et al. 2021 PLoS Computational Biology paper
         """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
         assert len(self.dirpath) > 0
@@ -100,8 +104,12 @@ class ENCoM(ENM):
         self.kphi = kphi
         self.epsi = epsi
         self.ic = interact_const
+        self.nic = null_interact_const
         self.bfact_params = bfact_params
         self.interact_level = interact_level
+        self.teruel2021_legacy = teruel2021_legacy
+        if teruel2021_legacy:
+            self.epsi = 0.001
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
             self.kr = 1000
             self.ktheta = 100000
@@ -110,23 +118,37 @@ class ENCoM(ENM):
             self.ic = 3
         if interact_mat is None:
             ic = self.ic
+            nc = self.nic
             # Presence of None is to enable indexing using the 1-8 numbers from Sobolev et al
+
             interact_mat = [[None] * 9,
-                            [None, ic, ic, ic, 1, ic, ic, ic, ic],
-                            [None, ic, 1, ic, 1, ic, ic, ic, 1],
-                            [None, ic, ic, 1, 1, ic, ic, 1, ic],
-                            [None, 1, 1, 1, ic, ic, ic, ic, ic],
+                            [None, ic, ic, ic, nc, ic, ic, ic, ic],
+                            [None, ic, nc, ic, nc, ic, ic, ic, nc],
+                            [None, ic, ic, nc, nc, ic, ic, nc, ic],
+                            [None, nc, nc, nc, ic, ic, ic, ic, ic],
                             [None, ic, ic, ic, ic, ic, ic, ic, ic],
                             [None, ic, ic, ic, ic, ic, ic, ic, ic],
-                            [None, ic, ic, 1, ic, ic, ic, 1, ic],
-                            [None, ic, 1, ic, 1, ic, ic, ic, 1]]
+                            [None, ic, ic, nc, ic, ic, ic, nc, ic],
+                            [None, ic, nc, ic, ic, ic, ic, ic, nc]]
+            if teruel2021_legacy:
+                ic = 3
+                interact_mat = [[None] * 9,
+                                [None, ic, ic, ic, 1, ic, ic, ic, ic],
+                                [None, ic, 1, ic, 1, ic, ic, ic, 1],
+                                [None, ic, ic, 1, 1, ic, ic, 1, ic],
+                                [None, 1, 1, 1, ic, ic, ic, ic, ic],
+                                [None, ic, ic, ic, ic, ic, ic, ic, ic],
+                                [None, ic, ic, ic, ic, ic, ic, ic, ic],
+                                [None, ic, ic, 1, ic, ic, ic, 1, ic],
+                                [None, ic, 1, ic, 1, ic, ic, ic, 1]]
         self.inter_mat = interact_mat
         ################################################################################################################
 
         self.V1_H, self.V2_H, self.V3_H, self.V4_H, self.bij = None, None, None, None, None
         super().__init__(pdb_file, added_atypes=added_atypes, added_massdef=added_massdef, atypes_list=atypes_list,
                          massdef_list=massdef_list, verbose=verbose, solve=solve, ignore_hetatms=ignore_hetatms,
-                         use_pickle=use_pickle, solve_mol=solve_mol, one_mass=one_mass)
+                         use_pickle=use_pickle, solve_mol=solve_mol, one_mass=one_mass,
+                         teruel2021_legacy=teruel2021_legacy)
 
     def _get_pickle_file(self):
         # TODO : better logic

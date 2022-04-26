@@ -3,6 +3,7 @@ from nrgten.massdef import MassDef, massdefs_dicts_are_same
 import numpy as np
 import os
 import abc
+import sys
 
 
 class ENM(metaclass=abc.ABCMeta):
@@ -32,7 +33,8 @@ class ENM(metaclass=abc.ABCMeta):
         entropy (float): The computed vibrational entropy.
     """
     def __init__(self, pdb_file, added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None,
-                 verbose=False, solve=False, use_pickle=False, ignore_hetatms=False, solve_mol=True, one_mass=False):
+                 verbose=False, solve=False, use_pickle=False, ignore_hetatms=False, solve_mol=True, one_mass=False,
+                 teruel2021_legacy=False):
         """Constructor for the ENM abstract base class.
 
         Args:
@@ -52,6 +54,8 @@ class ENM(metaclass=abc.ABCMeta):
                                         of the residues will be inferred.
             one_mass (bool, optional): If True, nucleic acids will be built using only one mass per nucleotide instead
                                        of 3.
+            teruel2021_legacy (bool, optional): If True, the parameters will perfectly reproduce the vibrational entropy
+                                                calculations in the Teruel et al. 2021 PLoS Computational Biology paper
         """
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
         assert len(self.dirpath) > 0
@@ -80,6 +84,7 @@ class ENM(metaclass=abc.ABCMeta):
         self.massdefs = self._parse_massdefs(atypes_list, massdef_list)
         self._print_verbose(self.massdefs)
         self.pdb_file = pdb_file
+        self.teruel2021_legacy = teruel2021_legacy
         self.mols = get_macromol_list(self.pdb_file, self.atypes_dict, self.massdefs, ignore_hetatms=ignore_hetatms)
         self.mol = self.mols[0]
         self.not_there = set()  # used to add resi-atom type pairs that are undefined
@@ -310,6 +315,8 @@ class ENM(metaclass=abc.ABCMeta):
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
         beta *= factor
+        if self.teruel2021_legacy:
+            beta *= 2*np.pi
         e = 2.718281828459045
         pi = 3.1415926535897932384626433832795028841971693993751
         entro = 0
@@ -400,7 +407,8 @@ class ENM(metaclass=abc.ABCMeta):
                     current_j += 1
         return filtered_eigvecs[start:start+n_vecs]
 
-    def build_conf_ensemble(self, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000):
+    def build_conf_ensemble(self, modes_list, filename, step=0.5, max_displacement=2.0, max_conformations=10000,
+                            use_motion=False):
         """Creates a conformational ensemble as a multi-model PDB file.
 
         The idea is to make every combination of the selected modes at every given rmsd step, up to a total deformation
@@ -446,7 +454,16 @@ class ENM(metaclass=abc.ABCMeta):
             fh.write("REMARK Conformational ensemble written by nrgten.enm.ENM.build_conf_ensemble()\n" +
                      "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
                      "REMARK This ensemble contains {0} conformations\n".format(n_conf))
-            for i in range(n_conf):
+            conf_seq = range(n_conf)
+            if use_motion:
+                if len(modes_list) > 1:
+                    raise ValueError("Cannot use 'motion' style conformational ensemble with more than one mode")
+                conf_seq = []
+                for breaks in [[int((n_conf-1)/2), n_conf, 1], [n_conf-1, int((n_conf-1)/2)-1, -1],
+                               [int((n_conf-1)/2)-1, -1, -1], [0, int((n_conf-1)/2), 1]]:
+                    for i in range(*breaks):
+                        conf_seq.append(i)
+            for i in conf_seq:
                 self._write_one_point(eigvecs_list, i, grid_side, step, fh)
             fh.write("END\n")
 
@@ -837,7 +854,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
             current_str = current_str + " {}".format(cfs[i])
         if additional_info_dict is not None:
             current_str = current_str + " " + " ".join(
-                [additional_info_dict[ids_data[i]][label] for label in add_info_labels])
+                [str(additional_info_dict[ids_data[i]][label]) for label in add_info_labels])
         current_str = current_str + " " + " ".join([str(x) for x in dynasigs_data[i]])
         df_strs.append(current_str)
     with open(outname, "w") as f:

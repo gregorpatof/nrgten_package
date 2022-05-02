@@ -326,6 +326,15 @@ class ENM(metaclass=abc.ABCMeta):
             entro += x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
         return entro
 
+    def compute_vib_entropy_one_mode(self, mode_index, beta=None):
+        if beta is None:
+            beta = np.e**0.25  # beta is h/kT, this value is for T = 310 K
+        vi = self.eigvals[mode_index]**0.5 / (2* np.pi)
+        x = vi * beta
+        return x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x))
+
+
+
     def compute_vib_enthalpy(self, beta=None, factor=1):
         """Vibrational enthalpy from the eigenfrequencies (without rigid-rotor approximation).
 
@@ -447,7 +456,7 @@ class ENM(metaclass=abc.ABCMeta):
                 raise ValueError(
                     "build_conf_ensemble was run with mode index {0} in the modes_list, which is a trivial " +
                     "(rotational/translational) motion.".format(mode_index))
-            eigvecs_list.append(np.copy(self.eigvecs[mode_index + 5]))
+            eigvecs_list.append(np.copy(self.eigvecs[mode_index - 1]))
             modermsd = self._rmsd_of_3n_vector(eigvecs_list[-1])
             eigvecs_list[-1] /= modermsd
         with open(filename, "w") as fh:
@@ -466,6 +475,55 @@ class ENM(metaclass=abc.ABCMeta):
             for i in conf_seq:
                 self._write_one_point(eigvecs_list, i, grid_side, step, fh)
             fh.write("END\n")
+
+    def build_conf_ensemble_with_nrg(self, modes_list, filename_ensemble, filename_energies, base_energy, beta,
+                                     step=0.5, max_displacement=2.0, max_conformations=10000, use_motion=False):
+        assert isinstance(modes_list, list)
+        entropies_list = np.array([self.compute_vib_entropy_one_mode(x-1) for x in modes_list])
+        spring_constants = 0.5 / entropies_list
+
+        grid_side = 1 + (2 * max_displacement / step)  # length of one side of the grid
+        if abs((grid_side - 0.999999999999) % 2) > 0.000001:  # make sure that small floating point errors are ignored
+            raise ValueError(
+                "build_conf_ensemble was executed with step={0} and max_displacement={1}. max_displacement " +
+                "has to be a multiple of step.".format(step, max_displacement))
+        grid_side = int(round(grid_side))
+        grid_side = int(grid_side)
+        n_conf = int(grid_side ** len(modes_list))  # total number of points, or conformations, in the grid
+        if n_conf > max_conformations:
+            raise ValueError("build_conf_ensemble was executed with parameters specifying {0} conformations with " +
+                             "max_conformations set at {1}. If you really want that many conformations, set " +
+                             "max_conformations higher.".format(n_conf, max_conformations))
+        eigvecs_list = []
+        for mode_index in modes_list:
+            if mode_index < 7:
+                raise ValueError(
+                    "build_conf_ensemble was run with mode index {0} in the modes_list, which is a trivial " +
+                    "(rotational/translational) motion.".format(mode_index))
+            eigvecs_list.append(np.copy(self.eigvecs[mode_index - 1]))
+            modermsd = self._rmsd_of_3n_vector(eigvecs_list[-1])
+            eigvecs_list[-1] /= modermsd
+        df_str_energies = ["model base_energy pot_elastic_energy tot_energy"]
+        with open(filename_ensemble, "w") as fh:
+            fh.write("REMARK Conformational ensemble written by nrgten.enm.ENM.build_conf_ensemble()\n" +
+                     "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
+                     "REMARK This ensemble contains {0} conformations\n".format(n_conf))
+            conf_seq = range(n_conf)
+            if use_motion:
+                if len(modes_list) > 1:
+                    raise ValueError("Cannot use 'motion' style conformational ensemble with more than one mode")
+                conf_seq = []
+                for breaks in [[int((n_conf - 1) / 2), n_conf, 1], [n_conf - 1, int((n_conf - 1) / 2) - 1, -1],
+                               [int((n_conf - 1) / 2) - 1, -1, -1], [0, int((n_conf - 1) / 2), 1]]:
+                    for i in range(*breaks):
+                        conf_seq.append(i)
+            for i in conf_seq:
+                nrg = self._write_one_point_nrg(eigvecs_list, spring_constants, i, grid_side, step, fh)
+                df_str_energies.append("{} {} {} {}".format(i+1, base_energy, nrg, base_energy+nrg))
+            fh.write("END\n")
+        with open(filename_energies, "w") as f:
+            f.write("\n".join(df_str_energies))
+            f.write("\n")
 
     def _write_one_point(self, eigvecs_list, conf_n, grid_side, step, fh):
         """Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1.
@@ -486,6 +544,30 @@ class ENM(metaclass=abc.ABCMeta):
         self._translate_3n_vector(t_vect)
         self._write_model(int(model_n + 1), fh)
         self._translate_3n_vector(-t_vect)
+
+    def _write_one_point_nrg(self, eigvecs_list, spring_constants, conf_n, grid_side, step, fh):
+        """Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1.
+
+        Computes contributions from every mode automatically, translates the enm coordinates, and resets it back to
+        original after having written one model to the filehandle fh.
+        """
+        model_n = conf_n
+        nsteps_list = []
+        for i in range(len(eigvecs_list)):
+            nsteps = conf_n % grid_side
+            conf_n -= nsteps
+            conf_n /= grid_side
+            nsteps_list.append(nsteps - (grid_side - 1) / 2)
+        t_vect = np.zeros(len(eigvecs_list[0]))
+        nrg = 0
+        for vec, nsteps, k in zip(eigvecs_list, nsteps_list, spring_constants):
+            t_vect += vec * nsteps * step
+            nrg += k * (nsteps*step)**2
+        self._translate_3n_vector(t_vect)
+        self._write_model(int(model_n + 1), fh)
+        self._translate_3n_vector(-t_vect)
+        return nrg
+
 
     def _rmsd_of_3n_vector(self, vec):
         dists = np.zeros((int(len(vec) / 3)))

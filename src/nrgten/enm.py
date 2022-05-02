@@ -326,13 +326,6 @@ class ENM(metaclass=abc.ABCMeta):
             entro += x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
         return entro
 
-    def compute_vib_entropy_one_mode(self, mode_index, beta=None):
-        if beta is None:
-            beta = np.e**0.25  # beta is h/kT, this value is for T = 310 K
-        vi = self.eigvals[mode_index]**0.5 / (2* np.pi)
-        x = vi * beta
-        return x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x))
-
 
 
     def compute_vib_enthalpy(self, beta=None, factor=1):
@@ -477,10 +470,10 @@ class ENM(metaclass=abc.ABCMeta):
             fh.write("END\n")
 
     def build_conf_ensemble_with_nrg(self, modes_list, filename_ensemble, filename_energies, base_energy, beta,
-                                     step=0.5, max_displacement=2.0, max_conformations=10000, use_motion=False):
+                                     eigval_scaling=0.1, step=0.5, max_displacement=2.0, max_conformations=10000,
+                                     use_motion=False):
         assert isinstance(modes_list, list)
-        entropies_list = np.array([self.compute_vib_entropy_one_mode(x-1) for x in modes_list])
-        spring_constants = 0.5 / entropies_list
+        eigvals_list = np.array([self.eigvals[x-1]*eigval_scaling for x in modes_list])
 
         grid_side = 1 + (2 * max_displacement / step)  # length of one side of the grid
         if abs((grid_side - 0.999999999999) % 2) > 0.000001:  # make sure that small floating point errors are ignored
@@ -503,7 +496,8 @@ class ENM(metaclass=abc.ABCMeta):
             eigvecs_list.append(np.copy(self.eigvecs[mode_index - 1]))
             modermsd = self._rmsd_of_3n_vector(eigvecs_list[-1])
             eigvecs_list[-1] /= modermsd
-        df_str_energies = ["model base_energy pot_elastic_energy tot_energy"]
+        energies = np.zeros(n_conf)
+        print(eigvals_list)
         with open(filename_ensemble, "w") as fh:
             fh.write("REMARK Conformational ensemble written by nrgten.enm.ENM.build_conf_ensemble()\n" +
                      "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
@@ -518,12 +512,16 @@ class ENM(metaclass=abc.ABCMeta):
                     for i in range(*breaks):
                         conf_seq.append(i)
             for i in conf_seq:
-                nrg = self._write_one_point_nrg(eigvecs_list, spring_constants, i, grid_side, step, fh)
-                df_str_energies.append("{} {} {} {}".format(i+1, base_energy, nrg, base_energy+nrg))
+                energies[i] = self._write_one_point_nrg(eigvecs_list, eigvals_list, i, grid_side, step, fh)
             fh.write("END\n")
+        energies += base_energy
+        probabilities = np.e**(-beta*energies)
+        probabilities /= np.sum(probabilities)
         with open(filename_energies, "w") as f:
-            f.write("\n".join(df_str_energies))
-            f.write("\n")
+            f.write("model energy beta probability\n")
+            for i in range(len(energies)):
+                f.write("{} {} {} {}\n".format(i+1, energies[i], beta, probabilities[i]))
+
 
     def _write_one_point(self, eigvecs_list, conf_n, grid_side, step, fh):
         """Helper function for build_conf_ensemble. conf_n is the conformation number from 0 to n-1.

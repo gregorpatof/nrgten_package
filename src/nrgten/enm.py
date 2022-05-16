@@ -268,7 +268,7 @@ class ENM(metaclass=abc.ABCMeta):
         else:
             return bfacts
 
-    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1):
+    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1, use_xyz=False):
         assert self.eigvals is not None
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
@@ -277,22 +277,33 @@ class ENM(metaclass=abc.ABCMeta):
         if beta is None:
             beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
         beta *= factor
-        e = 2.718281828459045
-        pi = 3.1415926535897932384626433832795028841971693993751
         entros = [None, None, None, None, None, None]
         for j in range(6, end_j):
-            vj = (self.eigvals[j] ** 0.5) / (2 * pi)
+            vj = (self.eigvals[j] ** 0.5) / (2 * np.pi)
             x = vj * beta
-            entros.append(x / (e ** x - 1) - np.log(1 - e ** (-1 * x)))
+            entros.append(x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x)))
         for i in range(n):
-            bfact = 0
-            for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
-                temp = 0
+            if use_xyz:
+                bfacts_xyz = [0, 0, 0]
+                for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
+                    for k in range(3):
+                        bfacts_xyz[k] += (self.eigvecs[j][3 * i + k] ** 2) * entros[j]
                 for k in range(3):
-                    temp += self.eigvecs[j][3 * i + k] ** 2
-                bfact += temp * entros[j]
-            bfacts.append(bfact * 1000)
-        filtered_bfacts = self.filter_bfactors(bfacts, filter)
+                    bfacts.append(bfacts_xyz[k] * 1000)
+            else:
+                bfact = 0
+                for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
+                    temp = 0
+                    for k in range(3):
+                        temp += self.eigvecs[j][3 * i + k] ** 2
+                    bfact += temp * entros[j]
+                bfacts.append(bfact * 1000)
+        if filter is not None and use_xyz:
+            raise ValueError("Filtering not yet supported with xyz signatures")
+        if use_xyz:
+            filtered_bfacts = bfacts
+        else:
+            filtered_bfacts = self.filter_bfactors(bfacts, filter)
         self.bfacts = filtered_bfacts
         return filtered_bfacts
 
@@ -729,11 +740,15 @@ class ENM(metaclass=abc.ABCMeta):
             for label, bfact in zip(labels, bfacts):
                 f.write("{0}\t{1}\n".format(label, bfact / divider))
 
-    def get_mass_labels(self):
+    def get_mass_labels(self, use_xyz=False):
         masses = self.mol.masses
         labels = []
         for mass in masses:
-            labels.append(mass[4])
+            if use_xyz:
+                for axis in ['X', 'Y', 'Z']:
+                    labels.append("{}|{}".format(mass[4], axis))
+            else:
+                labels.append(mass[4])
         return labels
 
     def _write_to_file(self, filename):
@@ -867,8 +882,8 @@ class ENM(metaclass=abc.ABCMeta):
 
 
 def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, models=None, models_labels=None,
-                         additional_info_dict=None, add_info_labels=None,
-                         added_atypes_list=None, added_massdef_list=None, get_cf_from_file=False):
+                         additional_info_dict=None, add_info_labels=None, added_atypes_list=None,
+                         added_massdef_list=None, get_cf_from_file=False, use_xyz=False):
     if models is None:
         from nrgten.encom import ENCoM
         models = [ENCoM]
@@ -895,9 +910,9 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
                 enm = mod(filename)
             else:
                 enm = mod(filename, added_atypes=added_atypes_list[i], added_massdef=added_massdef_list[i])
-            masslabels = [x.split('.')[-1] for x in enm.get_mass_labels()]  # only the mass name to allow for mutations
+            masslabels = [x.split('.')[-1] for x in enm.get_mass_labels(use_xyz=use_xyz)]  # only the mass name to allow for mutations
             for beta_val in beta_values:
-                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val))
+                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val, use_xyz=use_xyz))
                 vib_entro_data.append(enm.compute_vib_entropy(beta=beta_val))
                 if dynasigs_masslabels is None:
                     dynasigs_masslabels = masslabels

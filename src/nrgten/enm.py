@@ -256,6 +256,14 @@ class ENM(metaclass=abc.ABCMeta):
         self.entropy = ent
         return ent
 
+
+    # def compute_entropy_oscillator(self):
+    #     ent = 0
+    #     for i in range(6, len(self.eigvals)):
+    #         vi = (self.eigvals[i] ** 0.5) / (2 * pi)
+
+
+
     def filter_bfactors(self, bfacts, filter):
         if filter is not None:
             kept_bfacts = []
@@ -268,7 +276,8 @@ class ENM(metaclass=abc.ABCMeta):
         else:
             return bfacts
 
-    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1, use_xyz=False):
+    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1, use_xyz=False,
+                                   use_msf=False):
         assert self.eigvals is not None
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
@@ -296,7 +305,10 @@ class ENM(metaclass=abc.ABCMeta):
                     temp = 0
                     for k in range(3):
                         temp += self.eigvecs[j][3 * i + k] ** 2
-                    bfact += temp * entros[j]
+                    if use_msf:
+                        bfact += temp * entros[j] / self.eigvals[j]
+                    else:
+                        bfact += temp * entros[j]
                 bfacts.append(bfact * 1000)
         if filter is not None and use_xyz:
             raise ValueError("Filtering not yet supported with xyz signatures")
@@ -397,7 +409,9 @@ class ENM(metaclass=abc.ABCMeta):
                 indices3n.append(i3+1)
                 indices3n.append(i3+2)
             filtered_vecs = np.take(filtered_vecs, indices3n, axis=1)
-        vecs = self._gram_schmidt(filtered_vecs, min(n_vecs, 3*len(indices)))
+            vecs = self._gram_schmidt(filtered_vecs, min(n_vecs, 3 * len(indices)))
+        else:
+            vecs = self._gram_schmidt(filtered_vecs, n_vecs)
         if transpose:
             return np.transpose(vecs)
         else:
@@ -883,7 +897,7 @@ class ENM(metaclass=abc.ABCMeta):
 
 def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, models=None, models_labels=None,
                          additional_info_dict=None, add_info_labels=None, added_atypes_list=None,
-                         added_massdef_list=None, get_cf_from_file=False, use_xyz=False):
+                         added_massdef_list=None, get_cf_from_file=False, use_xyz=False, use_msf=False):
     if models is None:
         from nrgten.encom import ENCoM
         models = [ENCoM]
@@ -912,7 +926,7 @@ def generate_dynasigs_df(filenames, outname, id_func=None, beta_values=None, mod
                 enm = mod(filename, added_atypes=added_atypes_list[i], added_massdef=added_massdef_list[i])
             masslabels = [x.split('.')[-1] for x in enm.get_mass_labels(use_xyz=use_xyz)]  # only the mass name to allow for mutations
             for beta_val in beta_values:
-                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val, use_xyz=use_xyz))
+                dynasigs_data.append(enm.compute_bfactors_boltzmann(beta=beta_val, use_xyz=use_xyz, use_msf=use_msf))
                 vib_entro_data.append(enm.compute_vib_entropy(beta=beta_val))
                 if dynasigs_masslabels is None:
                     dynasigs_masslabels = masslabels

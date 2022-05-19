@@ -1,3 +1,5 @@
+digits = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+
 class ResidueList:
     """ Class used to represent the list of all kept residues from a macromol
     file (PDB or other), as a dict of dicts. This version keeps a single list
@@ -13,6 +15,10 @@ class ResidueList:
 
     def add(self, atom):
         if atom.name[0] == 'H': # Hydrogen atoms are not considered
+            return
+        elif atom.name[0] in digits and atom.name[1] == "H": # Also hydrogen atom
+            return
+        elif atom.elem == 'H': # Hydrogen
             return
         if self.atypes_dict is None:
             self.add_pvt(atom)

@@ -340,13 +340,11 @@ class ENM(metaclass=abc.ABCMeta):
         beta *= factor
         if self.teruel2021_legacy:
             beta *= 2*np.pi
-        e = 2.718281828459045
-        pi = 3.1415926535897932384626433832795028841971693993751
         entro = 0
         for i in range(6, len(self.eigvals)):
-            vi = (self.eigvals[i] ** 0.5) / (2 * pi)
+            vi = (self.eigvals[i] ** 0.5) / (2 * np.pi)
             x = vi * beta
-            entro += x / (e ** x - 1) - np.log(1 - e ** (-1 * x))
+            entro += x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x))
         return entro
 
 

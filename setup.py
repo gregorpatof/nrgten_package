@@ -8,7 +8,7 @@ with open(os.path.join(HERE, "README.md")) as f:
 
 setuptools.setup(
     name="nrgten",
-    version="1.1.9",
+    version="1.1.13",
     author="Olivier Mailhot",
     description="Najmanovich Research Group Toolkit for Elastic Networks",
     long_description=README,
@@ -18,7 +18,7 @@ setuptools.setup(
     package_dir={'':'src'},
     package_data={'nrgten': ['config/*.atomtypes', 'config/*.masses']},
     test_suite='tests',
-    install_requires=['numpy', 'pyvcon>=1.0.1'],
+    install_requires=['numpy', 'pyvcon>=1.0.2'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

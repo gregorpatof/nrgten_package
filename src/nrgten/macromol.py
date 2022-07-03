@@ -4,10 +4,12 @@ import nrgten.parser as parser
 import pyvcon.vcontacts_wrapper as vcontacts_wrapper
 import os
 import numpy as np
+import time
 
 
 def get_macromol_list(pdb_file, atypes_dict, massdefs, verbose=False, skipmass_threshold=2,
-                      cov_bond_length=2, ignore_hetatms=False, solve=False, unique_id=None):
+                      cov_bond_length=2, ignore_hetatms=False, solve=False, unique_id=None,
+                      use_precomp_vcon=False):
     with open(pdb_file) as f:
         lines = f.readlines()
     multimodel_flag = False
@@ -22,7 +24,8 @@ def get_macromol_list(pdb_file, atypes_dict, massdefs, verbose=False, skipmass_t
     if not multimodel_flag:
         return [Macromol(lines, atypes_dict, massdefs, verbose=verbose,
                          skipmass_threshold=skipmass_threshold, cov_bond_length=cov_bond_length,
-                         ignore_hetatms=ignore_hetatms, solve=solve, pdb_file=pdb_file, unique_id=unique_id)]
+                         ignore_hetatms=ignore_hetatms, solve=solve, pdb_file=pdb_file, unique_id=unique_id,
+                         use_precomp_vcon=use_precomp_vcon)]
 
     # This is the multi model (as in NMR files) case
     macromols = []
@@ -41,7 +44,8 @@ def get_macromol_list(pdb_file, atypes_dict, massdefs, verbose=False, skipmass_t
                 mol_id = str(unique_id) + str(count)
             macromols.append(Macromol(lines[start_i:stop_i], atypes_dict, massdefs, verbose=verbose,
                                       skipmass_threshold=skipmass_threshold, cov_bond_length=cov_bond_length,
-                                      ignore_hetatms=ignore_hetatms, solve=solve, pdb_file=pdb_file, unique_id=mol_id))
+                                      ignore_hetatms=ignore_hetatms, solve=solve, pdb_file=pdb_file, unique_id=mol_id,
+                                      use_precomp_vcon=use_precomp_vcon))
             count += 1
             start_i, stop_i = None, None
     assert start_i is None and stop_i is None
@@ -54,9 +58,11 @@ class Macromol:
     """
 
     def __init__(self, pdb_lines, atypes_dict, massdefs, verbose=False, skipmass_threshold=2,
-                 cov_bond_length=2, ignore_hetatms=False, solve=False, pdb_file=None, unique_id=None):
+                 cov_bond_length=2, ignore_hetatms=False, solve=False, pdb_file=None, unique_id=None,
+                 use_precomp_vcon=False):
         self.pdb_file = pdb_file
         self.unique_id = unique_id
+        self.use_precomp_vcon = use_precomp_vcon
         self.dirpath = os.path.dirname(os.path.abspath(__file__))
         assert len(self.dirpath) > 0
         self.verbose = verbose
@@ -75,7 +81,6 @@ class Macromol:
         self.connect, self.bends, self.torsions = None, None, None
         self.interact_pairs_level_dict = None
 
-        # TODO : adapt to compute only necessary information for ANM
         if solve:
             self.solve()
 
@@ -602,6 +607,16 @@ class Macromol:
                 atom = atoms[a]
                 atom.bfact = vector[i]
 
+    def set_occupancy(self, vector):
+        masses = self.masses
+        resis = self.resis
+        assert len(vector) == len(masses)
+        for i, m in enumerate(masses):
+            atoms = resis[m[4]]
+            for a in atoms:
+                atom = atoms[a]
+                atom.occ = vector[i]
+
     def translate_xyz(self, vector):
         """ Translation with (x, y, z) vector. Preserves internal structure.
         """
@@ -627,6 +642,7 @@ class Macromol:
         fh.write(s)
 
     def get_pdb_file_as_string(self):
+        #
         # TODO : right now in the case of RNA, not all original atoms are part of resis. Find a workaround.
         s = ""
         resis = self.resis
@@ -639,11 +655,17 @@ class Macromol:
     def get_surface_dict(self):
         if self.alt_flag:
             self.clear_alt_tags()
-        tmp_pdb_file = self.pdb_file + "{}_{}.tmp".format(os.getpid(), random.randint(0, 1000))
-        with open(tmp_pdb_file, "w") as f:
-            self.write_to_filehandle(f)
-        sd = vcontacts_wrapper.get_surface_dict(tmp_pdb_file, self.get_n_atoms())
-        os.remove(tmp_pdb_file)
+        if self.use_precomp_vcon:
+            tmp_pdb_file = self.pdb_file + ".tmp"
+        else:
+            tmp_pdb_file = self.pdb_file + "{}_{}.tmp".format(os.getpid(), random.randint(0, 1000))
+        if not (self.use_precomp_vcon and os.path.isfile(tmp_pdb_file)):
+            with open(tmp_pdb_file, "w") as f:
+                self.write_to_filehandle(f)
+        time.sleep(random.uniform(0.05, 0.1))
+        sd = vcontacts_wrapper.get_surface_dict(tmp_pdb_file, self.get_n_atoms(), use_precomputed=self.use_precomp_vcon)
+        if not self.use_precomp_vcon:
+            os.remove(tmp_pdb_file)
         return sd
 
 

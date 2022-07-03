@@ -34,7 +34,7 @@ class ENM(metaclass=abc.ABCMeta):
     """
     def __init__(self, pdb_file, added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None,
                  verbose=False, solve=False, use_pickle=False, ignore_hetatms=False, solve_mol=True, one_mass=False,
-                 teruel2021_legacy=False):
+                 teruel2021_legacy=False, use_precomp_vcon=False):
         """Constructor for the ENM abstract base class.
 
         Args:
@@ -85,11 +85,13 @@ class ENM(metaclass=abc.ABCMeta):
         self._print_verbose(self.massdefs)
         self.pdb_file = pdb_file
         self.teruel2021_legacy = teruel2021_legacy
-        self.mols = get_macromol_list(self.pdb_file, self.atypes_dict, self.massdefs, ignore_hetatms=ignore_hetatms)
+        self.use_precomp_vcon=False
+        self.mols = get_macromol_list(self.pdb_file, self.atypes_dict, self.massdefs, ignore_hetatms=ignore_hetatms,
+                                      use_precomp_vcon=use_precomp_vcon)
         self.mol = self.mols[0]
         self.not_there = set()  # used to add resi-atom type pairs that are undefined
         self.h, self.eigvecs, self.eigvals, self.eigvecs_mat = None, None, None, None
-        self.bfacts, self.entropy = None, None
+        self.eigfreqs, self.sq_eigvecs, self.bfacts, self.entropy = None, None, None, None
         if solve:
             if use_pickle:
                 if not self.build_from_pickle():
@@ -177,7 +179,7 @@ class ENM(metaclass=abc.ABCMeta):
                     return False
         return True
 
-    def compute_bfactors(self, filter=None, modes_proportion=1):
+    def compute_bfactors(self, filter=None):
         """Computes the predicted b-factors.
 
         The root-mean-square flutuations of every mass can be seen as a prediction of the experimental temperature
@@ -197,17 +199,21 @@ class ENM(metaclass=abc.ABCMeta):
         assert self.eigvals is not None
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
-        bfacts = []
-        end_j = int((n * 3 - 6) * modes_proportion) + 6
+        bfacts = np.zeros(n)
+        if self.sq_eigvecs is None:
+            self.compute_sq_eigvecs()
         for i in range(n):
             bfact = 0
-            for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
+            for j in range(6, len(self.eigvecs)):  # skips 1st 6 rotation-translation motions
                 temp = 0
                 for k in range(3):
-                    temp += self.eigvecs[j][3 * i + k] ** 2
+                    temp += self.sq_eigvecs[j][3 * i + k]
                 bfact += temp / self.eigvals[j]
-            bfacts.append(bfact * 1000)
-        filtered_bfacts = self.filter_bfactors(bfacts, filter)
+            bfacts[i] = bfact * 1000
+        if filter is not None:
+            filtered_bfacts = self.filter_bfactors(bfacts, filter)
+        else:
+            filtered_bfacts = bfacts
         self.bfacts = filtered_bfacts
         return filtered_bfacts
 
@@ -276,76 +282,96 @@ class ENM(metaclass=abc.ABCMeta):
         else:
             return bfacts
 
-    def compute_bfactors_boltzmann(self, beta=None, factor=1, filter=None, modes_proportion=1, use_xyz=False,
-                                   use_msf=False):
+    def compute_sq_eigvecs(self):
+        self.sq_eigvecs = np.square(self.eigvecs)
+
+    def compute_bfactors_boltzmann(self, beta=1, filter=None, use_msf=False):
         assert self.eigvals is not None
         assert self.eigvecs is not None
         n = int(len(self.eigvecs) / 3)
-        bfacts = []
-        end_j = int((n * 3 - 6) * modes_proportion) + 6
-        if beta is None:
-            beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
-        beta *= factor
-        entros = [None, None, None, None, None, None]
-        for j in range(6, end_j):
-            vj = (self.eigvals[j] ** 0.5) / (2 * np.pi)
-            x = vj * beta
-            entros.append(x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x)))
+        bfacts = np.zeros(n)
+        if self.eigfreqs is None:
+            self.compute_eig_freqs()
+        x = self.eigfreqs * beta
+        entros = x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x))
+        if self.sq_eigvecs is None:
+            self.compute_sq_eigvecs()
         for i in range(n):
-            if use_xyz:
-                bfacts_xyz = [0, 0, 0]
-                for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
-                    for k in range(3):
-                        bfacts_xyz[k] += (self.eigvecs[j][3 * i + k] ** 2) * entros[j]
+            bfact = 0
+            for j in range(6, len(self.eigvecs)):  # skips 1st 6 rotation-translation motions
+                temp = 0
                 for k in range(3):
-                    bfacts.append(bfacts_xyz[k] * 1000)
-            else:
-                bfact = 0
-                for j in range(6, end_j):  # skips 1st 6 rotation-translation motions
-                    temp = 0
-                    for k in range(3):
-                        temp += self.eigvecs[j][3 * i + k] ** 2
-                    if use_msf:
-                        bfact += temp * entros[j] / self.eigvals[j]
-                    else:
-                        bfact += temp * entros[j]
-                bfacts.append(bfact * 1000)
-        if filter is not None and use_xyz:
-            raise ValueError("Filtering not yet supported with xyz signatures")
-        if use_xyz:
-            filtered_bfacts = bfacts
-        else:
+                    temp += self.sq_eigvecs[j][3 * i + k]
+                if use_msf:
+                    bfact += temp * entros[j-6] / self.eigvals[j]
+                else:
+                    bfact += temp * entros[j-6]
+            bfacts[i] = bfact * 1000
+        if filter is not None:
             filtered_bfacts = self.filter_bfactors(bfacts, filter)
+        else:
+            filtered_bfacts = bfacts
         self.bfacts = filtered_bfacts
         return filtered_bfacts
 
-    def compute_vib_entropy(self, beta=None, factor=1):
-        """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
 
+    def compute_eig_freqs(self):
+        nonzero = self.eigvals[6:]
+        self.eigfreqs = np.sqrt(nonzero) / (2 * np.pi)
+
+
+    def compute_vib_entropy(self, beta=1):
+        """Vibrational entropy from the eigenfrequencies (without rigid-rotor approximation).
         Note:
             This is a more exact form of the vibrational entropy and is the preferred way to compute it. The
             compute_vib_entropy_rigid_rotor method is there only for reproducibility purposes as the old ENCoM model
             used that form.
 
         Args:
-            beta (float, optional): The scaling factor (higher beta means lower temperature). If None, the default value
-                                    is used.
-            factor (float, optional): Can be used to scale the default value when beta is set to None.
-
+            beta (float, optional): The scaling factor (higher beta means lower temperature). Default is 1 due to
+            preliminary data.
         Returns:
             float: The vibrational entropy of the system.
         """
-        if beta is None:
-            beta = 1.55 * 10 ** -13  # beta is h/kT, this value is for T = 310 K
-        beta *= factor
         if self.teruel2021_legacy:
             beta *= 2*np.pi
-        entro = 0
+        if self.eigfreqs is None:
+            self.compute_eig_freqs()
+        x = self.eigfreqs * beta
+        return np.sum(x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x)))
+
+
+    def compute_Acla(self, beta=1):
+        a_cla = 0
         for i in range(6, len(self.eigvals)):
-            vi = (self.eigvals[i] ** 0.5) / (2 * np.pi)
+            vi = np.sqrt(self.eigvals[i]) / (2 * np.pi)
             x = vi * beta
-            entro += x / (np.e ** x - 1) - np.log(1 - np.e ** (-1 * x))
-        return entro
+            a_cla += np.log(x)
+        return 1/beta * a_cla
+
+    def compute_Avib(self, beta=1):
+        a_vib = 0
+        for i in range(6, len(self.eigvals)):
+            vi = np.sqrt(self.eigvals[i]) / (2 * np.pi)
+            x = vi * beta
+            a_vib += np.log(1/(1 - np.e ** (-1 * x)))
+        return -1/beta * a_vib
+
+    def compute_Evib(self, beta=1):
+        e_vib = 0
+        for i in range(6, len(self.eigvals)):
+            vi = np.sqrt(self.eigvals[i]) / (2 * np.pi)
+            x = vi * beta
+            e_vib += x/((np.e ** x) - 1)
+        return 1/beta * e_vib
+
+    def compute_HCvib(self, beta=1):
+        hc = 0
+        for i in range(6, len(self.eigvals)):
+            vi = np.sqrt(self.eigvals[i]) / (2 * np.pi)
+            x = vi * beta
+            hc += x**2 * (np.e ** x) / ((np.e ** x) - 1)**2
+        return beta * hc
 
 
 
@@ -491,6 +517,28 @@ class ENM(metaclass=abc.ABCMeta):
             for i in conf_seq:
                 self._write_one_point(eigvecs_list, i, grid_side, step, fh)
             fh.write("END\n")
+
+    def build_motion_elastic(self, mode_index, filename, max_displacement=2.0, n_conf=90):
+        if mode_index < 7:
+            raise ValueError("build_motion_elastic() called with trivial mode (mode # {})".format(mode_index))
+        vec = np.copy(self.eigvecs[mode_index-1])
+        modermsd = self._rmsd_of_3n_vector(vec)
+        vec /= modermsd
+        full_path = []
+        for i in range(n_conf):
+            angle = np.pi*2*i/float(n_conf)
+            full_path.append(np.sin(angle)*max_displacement)
+        with open(filename, "w") as fh:
+            fh.write("REMARK Elastic motion for mode {} written by " +
+                     "nrgten.enm.ENM.build_elastic_motion()\n".format(mode_index) +
+                     "REMARK from the NRGTEN Python package, copyright Najmanovich Research Group 2020\n" +
+                     "REMARK This ensemble contains {0} conformations\n".format(n_conf))
+            for i, rmsd in enumerate(full_path):
+                t_vect = vec * rmsd
+                self._translate_3n_vector(t_vect)
+                self._write_model(i+1, fh)
+                self._translate_3n_vector(-t_vect)
+
 
     def build_conf_ensemble_with_nrg(self, modes_list, filename_ensemble, filename_energies, base_energy, beta,
                                      eigval_scaling=0.1, step=0.5, max_displacement=2.0, max_conformations=10000,
@@ -730,6 +778,15 @@ class ENM(metaclass=abc.ABCMeta):
         """
         assert self.get_n_masses() == len(vector)
         self.mol.set_bfactors(vector)
+
+    def set_occupancy(self, vector):
+        """Sets the occupancy of all atoms in the file.
+
+        Args:
+            vector (list): the new occupancy values, need to be the same length as the number of masses.
+        """
+        assert self.get_n_masses() == len(vector)
+        self.mol.set_occupancy(vector)
 
     def write_dynamical_signature(self, outfile, normalize=False):
         """Writes a 'dynamical signature' to the output file specified.
@@ -974,8 +1031,6 @@ def validate_masslabels(new_labels, old_labels):
     for new, old in zip(new_labels, old_labels):
         if new != old:
             raise ValueError("problem with masslabels in generate_dynasigs_df: {} not equal to {}".format(new, old))
-
-
 
 
 

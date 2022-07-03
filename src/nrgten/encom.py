@@ -44,7 +44,7 @@ class ENCoM(ENM):
                  power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
                  added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
                  ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3,
-                 teruel2021_legacy=False):
+                 teruel2021_legacy=False, use_precomp_vcon=False):
         """Constructor for the ENCoM class.
 
         Args:
@@ -108,6 +108,7 @@ class ENCoM(ENM):
         self.bfact_params = bfact_params
         self.interact_level = interact_level
         self.teruel2021_legacy = teruel2021_legacy
+        self.use_precomp_vcon = use_precomp_vcon
         if teruel2021_legacy:
             self.epsi = 0.001
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
@@ -148,7 +149,7 @@ class ENCoM(ENM):
         super().__init__(pdb_file, added_atypes=added_atypes, added_massdef=added_massdef, atypes_list=atypes_list,
                          massdef_list=massdef_list, verbose=verbose, solve=solve, ignore_hetatms=ignore_hetatms,
                          use_pickle=use_pickle, solve_mol=solve_mol, one_mass=one_mass,
-                         teruel2021_legacy=teruel2021_legacy)
+                         teruel2021_legacy=teruel2021_legacy, use_precomp_vcon=use_precomp_vcon)
 
     def _get_pickle_file(self):
         # TODO : better logic
@@ -493,5 +494,5 @@ def _distance(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
 
 if __name__ == "__main__":
-    test = ENCoM("/Users/Paracelsus/school/PhD/h21/projet/encom_rna/md_analysis/trajectories/mir125_AA_1_model1.pdb")
-    print(test.compute_bfactors())
+    test = ENCoM("../../tests/test_medium.pdb")
+    print(test.build_motion_elastic(7, "test_elastic.pdb"))

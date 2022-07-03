@@ -120,8 +120,7 @@ def get_amplitudes_for_fit(reference, target, n_modes, alignment=None, filter=No
         alignment = [[x for x in range(n)], [x for x in range(n)]]
     conf_change = fit(reference, target, alignment, filter)
     eigvecs = reference.get_filtered_eigvecs_mat(alignment[0], filter)
-    u, s, v = np.linalg.svd(eigvecs)
-    x = np.dot(np.dot(np.transpose(v), np.diag(s)), np.dot(np.transpose(u), conf_change))
+    x = np.dot(np.transpose(eigvecs), conf_change)
     return x[6:n_modes+6]
 
 
@@ -148,7 +147,7 @@ def cumulative_overlap(reference, target, n_modes, alignment=None, filter=None):
         n = reference.get_n_masses()
         alignment = [[x for x in range(n)], [x for x in range(n)]]
     conf_change = fit(reference, target, alignment, filter)
-    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter))
+    eigvecs = np.transpose(reference.get_filtered_eigvecs_mat(alignment[0], filter, n_vecs=6+n_modes))
     assert len(conf_change) == len(eigvecs[0])
     return _cumulative_overlap_helper(conf_change, eigvecs[6:6+n_modes])
 

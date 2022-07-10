@@ -39,12 +39,12 @@ class ENCoM(ENM):
                                  long-range interaction (V4)
         """
 
-    def __init__(self, pdb_file, kr=4000, ktheta=80000, kphi=20000, epsi=0.08, apply_epsi=False, interact_const=80,
-                 null_interact_const=0.00125,
+    def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=10,
+                 null_interact_const=0.1,
                  power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
                  added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
                  ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3,
-                 teruel2021_legacy=False, use_precomp_vcon=False):
+                 teruel2021_legacy=False, new_optimized_params=False, use_precomp_vcon=False):
         """Constructor for the ENCoM class.
 
         Args:
@@ -111,6 +111,13 @@ class ENCoM(ENM):
         self.use_precomp_vcon = use_precomp_vcon
         if teruel2021_legacy:
             self.epsi = 0.001
+        if new_optimized_params:
+            self.kr = 4000
+            self.ktheta = 80000
+            self.kphi = 20000
+            self.epsi = 0.08
+            self.ic = 80,
+            self.nic = 0.00125
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
             self.kr = 1000
             self.ktheta = 100000

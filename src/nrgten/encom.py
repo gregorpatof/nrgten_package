@@ -116,8 +116,8 @@ class ENCoM(ENM):
             self.ktheta = 80000
             self.kphi = 20000
             self.epsi = 0.08
-            self.ic = 80,
-            self.nic = 0.0125 # TODO: push this version and upload to PyPI
+            self.ic = 80
+            self.nic = 0.0125
         if self.bfact_params: # optimal parameters for b-factor correlation from Frappier and Najmanovich 2014
             self.kr = 1000
             self.ktheta = 100000

@@ -234,6 +234,8 @@ class ENCoM(ENM):
         assert isinstance(other, ENCoM)
         if not self.mol.solved:
             self.mol.solve()
+        self.eigfreqs = None
+        self.sq_eigvecs = None
         masses = self.mol.masses
         connect = self.mol.connect
         bends = self.mol.bends
@@ -258,6 +260,8 @@ class ENCoM(ENM):
         assert isinstance(other, ENCoM)
         if not self.mol.solved:
             self.mol.solve()
+        self.eigfreqs = None
+        self.sq_eigvecs = None
         masses = self.mol.masses
         connect = self.mol.connect
         bends = self.mol.bends

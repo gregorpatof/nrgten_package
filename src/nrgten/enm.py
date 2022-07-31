@@ -338,14 +338,14 @@ class ENM(metaclass=abc.ABCMeta):
         if self.eigfreqs is None:
             self.compute_eig_freqs()
         x = self.eigfreqs * beta
-        return x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x))
+        return np.sum(x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x)))
 
 
     def compute_vib_entropy_vector(self, beta):
         if self.eigfreqs is None:
             self.compute_eig_freqs()
         x = self.eigfreqs * beta
-        return np.sum(x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x)))
+        return x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x))
 
 
     def compute_Acla(self, beta=1):

@@ -19,9 +19,9 @@ enzyme and the conformational change from closed to open::
 
 When executed this prints::
 
-[0.2587258247160942, 0.4403175171745016, 0.2693148077323511, 0.17032337831252087, 0.49056639198213053, 0.28346742540893066, 0.26312538412865266, 0.04705415373099675, 0.16308585479164334, 0.006879741931829673]
+[0.22349464198742516, 0.3799027474795493, 0.31226376941324435, 0.11926373811636343, 0.07141121329464464, 0.5434832619441955, 0.2850587863860328, 0.16140383753735463, 0.18518389540695462, 0.13542692494361588]
 
-We can see that modes 2 and 5 have the best overlaps.
+We can see that modes 2 and 6 have the best overlaps.
 
 Cumulative overlap
 ------------------
@@ -40,8 +40,8 @@ the specified modes can describe the conformational change::
 
 Which prints::
 
-	Cumulative overlap 10 modes, from closed to open: 0.8840031908416043
-	Cumulative overlap 10 modes, from open to closed: 0.8927765643323546
+	Cumulative overlap 10 modes, from closed to open: 0.8754571996622168
+	Cumulative overlap 10 modes, from open to closed: 0.8888323647003489
 
 We can see that the first 10 normal modes computed by ENCoM capture both transitions
 between the closed and open states of citrate synthase very well.

@@ -30,7 +30,7 @@ If we print the probabilities::
 
 We get the following values::
 
-	prob_open : 0.3338869389881078, prob_closed : 0.4389801295109857
+	prob_open : 0.28940086631043577, prob_closed : 0.43081399660689834
 
 The aspartic acid in position 239 has been mutated to a lysine in both conformations
 using MODELLER (`doi.org/10.1002/cpbi.3 <https://doi.org/10.1002/cpbi.3>`_). We can compute
@@ -46,9 +46,9 @@ the same transition probabilities using the mutated forms::
 
 This gives::
 
-	prob_open_mut : 0.33353468729059454, prob_closed_mut : 0.44217369623754493
+	prob_open_mut : 0.2903252666753628, prob_closed_mut : 0.4304065571363618
 
-So we can see that the mutation slightly favors the closed state. Here is the full
+So we can see that the mutation slightly favors the open state. Here is the full
 documentation for the get_transit_probs method:
 
 .. autofunction:: nrgten.metrics.get_transit_probs

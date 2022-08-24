@@ -62,12 +62,11 @@ computed with ENCoM, simpy use::
     from nrgten.metrics import pca_ensemble, rmsip
 
     insulin_nmr = ENCoM("2lwz.pdb")
-    variances, pcs = pca_ensemble(insulin_nmr, variance_to_explain=0.9)
+    variances, pcs = get_pcs_no_rot_tran(insulin_nmr, proportion_nrt_variance=0.9)
     print(rmsip(pcs, insulin_nmr.eigvecs[6:16]))
 
 This gives::
 
-    0.47582014355116004
+    0.6764434372865784
 
-Which means that the 10 normal modes agree with the first 4 PCs to a certain
-extent.
+Which means that the 10 normal modes agree well with the first 8 nrt-PCs.

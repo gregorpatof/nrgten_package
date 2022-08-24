@@ -27,8 +27,8 @@ using::
 
     print(diff_entropy)
 
-We see that it is around 0.005, which means that the mutant is slightly more
-rigid than the WT.
+We see that it is around -0.02, which means that the mutant is more
+flexible than the WT.
 
 
 .. note::

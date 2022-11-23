@@ -39,8 +39,8 @@ class ENCoM(ENM):
                                  long-range interaction (V4)
         """
 
-    def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=10,
-                 null_interact_const=0.1,
+    def __init__(self, pdb_file, kr=1000, ktheta=10000, kphi=10000, epsi=0.01, apply_epsi=False, interact_const=3,
+                 null_interact_const=1,
                  power_dependenceV4=4, interact_mat=None, use_stem=False, kphi1=1, kphi3=0.5, bfact_params=False,
                  added_atypes=None, added_massdef=None, atypes_list=None, massdef_list=None, verbose=False, solve=True,
                  ignore_hetatms=False, use_pickle=False, solve_mol=True, one_mass=False, interact_level=3,

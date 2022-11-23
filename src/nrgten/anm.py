@@ -21,7 +21,8 @@ class ANM(ENM):
         kr (float): the interaction constant (does not change the solution but scales the values).
     """
     def __init__(self, pdb_file, cut=float('inf'), power_dependence=0, kr=1, solve=True, use_pickle=False,
-                 ignore_hetatms=False, atypes_list=None, massdef_list=None, solve_mol=True, one_mass=False):
+                 added_atypes=None, added_massdef=None, ignore_hetatms=False, atypes_list=None, massdef_list=None,
+                 solve_mol=True, one_mass=False):
         """Constructor for the ANM class.
 
         Args:
@@ -45,8 +46,9 @@ class ANM(ENM):
         self.cut = cut
         self.pd = power_dependence
         self.kr = kr
-        super().__init__(pdb_file, solve=solve, use_pickle=use_pickle, ignore_hetatms=ignore_hetatms,
-                         atypes_list=atypes_list, massdef_list=massdef_list, solve_mol=solve_mol, one_mass=one_mass)
+        super().__init__(pdb_file, added_atypes=added_atypes, added_massdef=added_massdef, solve=solve,
+                         use_pickle=use_pickle, ignore_hetatms=ignore_hetatms, atypes_list=atypes_list,
+                         massdef_list=massdef_list, solve_mol=solve_mol, one_mass=one_mass)
 
     def build_hessian(self):
         """Builds the Hessian matrix.

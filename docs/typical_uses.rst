@@ -26,5 +26,6 @@ Here are some typical uses of ENCoM:
    conf_ensemble
    svib_mutations
    transit_probs
+   rna
 
 

@@ -4,6 +4,13 @@ import numpy as np
 import os
 import abc
 import sys
+try:
+    from numba import njit
+except ImportError:
+    def njit(cache, nogil):
+        def decorator(func):
+            return func
+        return decorator
 
 
 class ENM(metaclass=abc.ABCMeta):
@@ -216,6 +223,30 @@ class ENM(metaclass=abc.ABCMeta):
             filtered_bfacts = bfacts
         self.bfacts = filtered_bfacts
         return filtered_bfacts
+
+    def compute_covmat(self, beta=None, use_entropy=False):  # TODO: test this
+        assert self.eigvals is not None
+        assert self.eigvecs is not None
+        n = int(len(self.eigvecs) / 3)
+        entros = np.zeros(n-6)
+        if beta is not None:
+            use_entropy = True
+        if use_entropy:
+            if beta is None:
+                beta = 1
+            if self.eigfreqs is None:
+                self.compute_eig_freqs()
+            x = self.eigfreqs * beta
+            entros = x / (np.float_power(np.e, x) - 1) - np.log(1 - np.float_power(np.e, -x))
+        covmat = helper_covmat(n, self.eigvecs, self.eigvals, entros, use_entropy)
+        return covmat
+
+    def compute_local_signature(self, beta=None, use_entropy=False):
+        covmat = self.compute_covmat(beta=beta, use_entropy=use_entropy)
+        masscoords = self.mol.masscoords
+        connect_mat = self.mol.connect
+        return helper_localsig(covmat, masscoords, connect_mat)
+
 
     def get_exp_bfacts(self, method="average", filter=None):
         """Extracts the experimental b-factors for every mass in the system.
@@ -1038,6 +1069,45 @@ def validate_masslabels(new_labels, old_labels):
     for new, old in zip(new_labels, old_labels):
         if new != old:
             raise ValueError("problem with masslabels in generate_dynasigs_df: {} not equal to {}".format(new, old))
+
+
+@njit
+def helper_covmat(n, eigvecs, eigvals, entros, use_entropy):
+    covmat = np.zeros((n, n, 3, 3))
+    for i in range(n):
+        for j in range(n):
+            for k in range(6, len(eigvecs)):
+                for q in range(3):
+                    for r in range(3):
+                        if use_entropy:
+                            covmat[i, j, q, r] = eigvecs[k][3 * i + q] * eigvecs[k][3 * j + r] * entros[k - 6]
+                        else:
+                            covmat[i, j, q, r] = eigvecs[k][3 * i + q] * eigvecs[k][3 * j + r] / eigvals[k]
+    return covmat
+
+
+@njit
+def helper_localsig(covmat, masscoords, connect_mat):
+    localsig = np.zeros(len(masscoords))
+    n_list = np.zeros(len(masscoords))
+    for i in range(len(masscoords) - 1):
+        for j in range(i + 1, len(masscoords)):
+            if connect_mat[i][j] != 0:
+                dist_fluct = 0
+                coords_i = masscoords[i]
+                coords_j = masscoords[j]
+                diff = coords_i - coords_j
+                dist_sq = np.sum(np.square(diff))
+                for q in range(3):
+                    for r in range(3):
+                        dist_fluct += diff[q] * diff[r] * (covmat[i, i, q, r] + covmat[j, j, q, r]
+                                                           - covmat[i, j, q, r] - covmat[j, i, q, r])
+                val = dist_fluct / dist_sq
+                localsig[i] += val
+                localsig[j] += val
+                n_list[i] += 1
+                n_list[j] += 1
+    return localsig / n_list * 1000
 
 
 

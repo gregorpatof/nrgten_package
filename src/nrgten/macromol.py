@@ -194,12 +194,13 @@ class Macromol:
                         newresis[k][atom] = rd[atom]
                 # TODO : find way of dealing with crappy residue portions (maybe modeRNA after all?)
                 else:
-                    raise ValueError("could not find center atom {0} in residue {1}, file {2}\n".format(c, r, self.pdb_file))
+                    raise ValueError("could not find center atom {0} in residue {1}, file {2}\n".format(
+                                                                                                 c, r, self.pdb_file))
             else:
                 for i in range(len(md.centers)):
                     (atoms, c, name) = md.get_atoms_center_name(i)
                     atoms = atoms.copy()
-                    if not c in atoms:
+                    if c not in atoms:
                         print(r)
                         print(atoms)
                         continue
@@ -221,6 +222,7 @@ class Macromol:
                     else:
                         raise ValueError("could not find center atom {0} in residue {1}\n".format(c, r))
         self.resis = newresis
+        # TODO: create self.oldresis and write method to map unassigned atoms to the closest mass center
         return masses
 
     def compute_connect_general(self):
@@ -258,7 +260,8 @@ class Macromol:
         c2 = self.resi_cubes[j]
         return not (c1[1] < c2[0] or c2[1] < c1[0] or c1[5] < c2[4] or c2[5] < c1[4] or c1[3] < c2[2] or c2[3] < c1[2])
 
-    def make_mass_resikey(self, ogkey, name):
+    @staticmethod
+    def make_mass_resikey(ogkey, name):
         sk = ogkey.split('|')
         sk[0] = sk[0] + ".{0}".format(name)
         return '|'.join(sk)
@@ -337,7 +340,8 @@ class Macromol:
         else:
             raise ValueError("Sequences not sequential in file " + self.pdb_file)
 
-    def validate_visited(self, visited):
+    @staticmethod
+    def validate_visited(visited):
         """ Returns True if chains are contiguous, False otherwise.
         """
         seen = set()
@@ -374,7 +378,8 @@ class Macromol:
                 visited[e] = color
                 self.dfs(connect, visited, color, e)
 
-    def adjacent_edges(self, connect, i):
+    @staticmethod
+    def adjacent_edges(connect, i):
         """ Returns all edges/vertices adjacent to vertex i in connectivity
             matrix connect (undirected graph).
         """
@@ -398,7 +403,8 @@ class Macromol:
                         bends.add(bend)
         return self.trim_bends(bends)
 
-    def trim_bends(self, bends):
+    @staticmethod
+    def trim_bends(bends):
         """ Gets rid of duplicate bending angles.
         """
         trimmed = set()
@@ -408,11 +414,12 @@ class Macromol:
             trimmed.add(b)
         return trimmed
 
-    def make_bend_tuple(self, i, j, k):
+    @staticmethod
+    def make_bend_tuple(i, j, k):
         s = {i, j, k}
         if len(s) != 3:
             return None
-        return (i, j, k)
+        return i, j, k
 
     def find_torsions(self, connect):
         torsions = set()
@@ -426,7 +433,8 @@ class Macromol:
                             torsions.add(torsion)
         return self.trim_torsions(torsions)
 
-    def trim_torsions(self, torsions):
+    @staticmethod
+    def trim_torsions(torsions):
         trimmed = set()
         for t in torsions:
             if t[0] > t[3]:
@@ -441,7 +449,8 @@ class Macromol:
             return None
         return i, j, k, l
 
-    def get_connects(self, connect, i):
+    @staticmethod
+    def get_connects(connect, i):
         connects = []
         for (j, c) in enumerate(connect[i]):
             if c != 0:

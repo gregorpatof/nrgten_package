@@ -1,5 +1,6 @@
 digits = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
 
+
 class ResidueList:
     """ Class used to represent the list of all kept residues from a macromol
     file (PDB or other), as a dict of dicts. This version keeps a single list
@@ -10,15 +11,15 @@ class ResidueList:
         self.atypes_dict = atypes_dict
         self.lastkey = None
         self.resicount = 0
-        self.atoms = {} # stores atoms according to their atom number and validates there is no repeat
+        self.atoms = {}  # stores atoms according to their atom number and validates there is no repeat
         self.alt_flag = False
 
     def add(self, atom):
-        if atom.name[0] == 'H': # Hydrogen atoms are not considered
+        if atom.name[0] == 'H':  # Hydrogen atoms are not considered
             return
-        elif atom.name[0] in digits and atom.name[1] == "H": # Also hydrogen atom
+        elif atom.name[0] in digits and atom.name[1] == "H":  # Also hydrogen atom
             return
-        elif atom.elem == 'H': # Hydrogen
+        elif atom.elem == 'H':  # Hydrogen
             return
         if self.atypes_dict is None:
             self.add_pvt(atom)
@@ -28,7 +29,7 @@ class ResidueList:
             raise ValueError("Trying to add atom with unsupported residue type: \n{0}\n".format(atom.toString()))
 
     def add_pvt(self, atom):
-        if atom.alt != ' ' and atom.alt != 'A': # treats alternate location at the chain level
+        if atom.alt != ' ' and atom.alt != 'A':  # treats alternate location at the chain level
             return
         if atom.insert == ' ':
             basekey = "{}|{}|{}".format(atom.resiname, atom.resinum, atom.chain)

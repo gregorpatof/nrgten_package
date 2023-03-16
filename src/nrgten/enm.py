@@ -954,6 +954,8 @@ class ENM(metaclass=abc.ABCMeta):
                     e = sys.exc_info()[0]
                     print("Error in surface computation, file {0}".format(self.mol.pdb_file))
                     raise e
+                if surf_tot < 0:
+                    surf_tot = 0
                 bij[i][j] = surf_tot
                 bij[j][i] = surf_tot
         self._print_verbose(self.not_there)

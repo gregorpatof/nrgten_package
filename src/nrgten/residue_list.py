@@ -8,6 +8,7 @@ class ResidueList:
 
     def __init__(self, atypes_dict):
         self.list = {}
+        self.alt_dict = {}
         self.atypes_dict = atypes_dict
         self.lastkey = None
         self.resicount = 0
@@ -29,12 +30,16 @@ class ResidueList:
             raise ValueError("Trying to add atom with unsupported residue type: \n{0}\n".format(atom.toString()))
 
     def add_pvt(self, atom):
-        if atom.alt != ' ' and atom.alt != 'A':  # treats alternate location at the chain level
-            return
         if atom.insert == ' ':
             basekey = "{}|{}|{}".format(atom.resiname, atom.resinum, atom.chain)
         else:
             basekey = "{}|{}{}|{}".format(atom.resiname, atom.resinum, atom.insert, atom.chain)
+        if atom.alt != ' ':  # if alternate locations, first one seen has precedence, others are ignored
+            if basekey in self.alt_dict:
+                if atom.alt != self.alt_dict[basekey]:
+                    return
+            else:
+                self.alt_dict[basekey] = atom.alt
         if basekey != self.lastkey:
             self.resicount += 1
         self.lastkey = basekey
